@@ -33,7 +33,6 @@ npm test           # Runs the native test suite ensuring zero-leakage constraint
 
 ```typescript
 import { DiagnosticAgent } from './src/index.ts';
-import fs from 'node:fs';
 
 // 1. Highly optimized preset Profile loading
 const agent = await DiagnosticAgent.createProfile({
@@ -41,8 +40,25 @@ const agent = await DiagnosticAgent.createProfile({
   environment: 'prod',                       // Auto-enables CrashGuard, LeakMonitor, etc.
   appType: 'web',                            // Tunes for HTTP, Web Sockets, Request Latency
 }).start();
+```
 
-// 2. OR Compose manually for fine-grained control:
+#### Profile Presets & Optimization
+
+The `createProfile` API uses intelligent defaults based on your environment and the nature of your application:
+
+| Category | Option | Components Enabled | Optimization Target |
+| --- | --- | --- | --- |
+| **Env** | `prod` | CrashGuard, LogTracing | **Stability**: Minimal overhead, high safety. |
+|  | `dev`, `test` | `prod` + FsTracing, StaticScanner, AuditScanner, SourceMaps | **Forensics**: Deep blocking & security analysis. |
+| **App** | `web` | HttpTracing, Socket Leak Monitor, Auto-Patching | **Latency**: Request/Response & Socket tracking. |
+|  | `db` | QueryAnalysis, Connection Leak Monitor, Auto-Patching | **DataAccess**: Query patterns & connection safety. |
+|  | `worker` | RuntimeMonitor (CPU/Mem), Handle Leak Monitor, Auto-Patching | **Throughput**: Long-running safety & loop health. |
+
+### 2. OR Compose manually for fine-grained control:
+```typescript
+import { DiagnosticAgent } from './src/index.ts';
+import fs from 'node:fs';
+
 const manualAgent = await DiagnosticAgent.create()
   .withSourceMaps('./dist')                        
   .withRuntimeMonitor({ eventLoopThresholdMs: 50 }) 
