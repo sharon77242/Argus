@@ -1,0 +1,93 @@
+import { describe, it, beforeEach, afterEach } from "node:test";
+import assert from "node:assert/strict";
+import { once } from "node:events";
+import { RuntimeMonitor, type ProfilerEvent } from "../../src/profiling/runtime-monitor.ts";
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+describe("RuntimeMonitor", () => {
+  let monitor: RuntimeMonitor;
+
+  beforeEach(() => {
+    // Fast intervals for testing, low threshold for lag
+    monitor = new RuntimeMonitor({
+      checkIntervalMs: 100,
+      eventLoopThresholdMs: 20,
+      cpuProfileDurationMs: 50,
+      cpuProfileCooldownMs: 1000, // ensure we only profile once
+    });
+  });
+
+  afterEach(() => {
+    monitor.stop();
+  });
+
+  it("should detect memory leak", async () => {
+    const localMonitor = new RuntimeMonitor({
+      checkIntervalMs: 50,
+      memoryGrowthThresholdBytes: 1024, // VERY small growth for testing
+    });
+
+    localMonitor.start();
+
+    const p = once(localMonitor, "anomaly");
+
+    // Artificial memory growth simulation
+    const arr: any[] = [];
+
+    // Wait a bit for baseline to establish
+    await sleep(10);
+
+    for (let i = 0; i < 50000; i++) {
+      arr.push(new Array(100).fill("leak"));
+    }
+
+    // Give it time to poll, monitor uses unref interval so we need sleep to keep event loop alive
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout waiting for memory leak")), 1000),
+    );
+
+    const [event] = (await Promise.race([p, timeoutPromise])) as any;
+
+    assert.strictEqual(event.type, "memory-leak");
+    assert.ok(event.growthBytes! > 1024);
+
+    localMonitor.stop();
+  });
+
+  it("should detect event loop lag and capture CPU profile", async () => {
+    monitor.start();
+
+    const p = new Promise(resolve => {
+      const handler = (event: ProfilerEvent) => {
+        if (event.type === "event-loop-lag" && event.profileDataPath) {
+          monitor.off("anomaly", handler);
+          resolve([event]);
+        }
+      };
+      monitor.on("anomaly", handler);
+    });
+
+    await sleep(50); // allow baseline to settle
+
+    // Create an artificial event loop block synchronously
+    const start = Date.now();
+    while (Date.now() - start < 150) {
+      // busy wait
+    }
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout waiting for lag event")), 2000),
+    );
+    const [event] = (await Promise.race([p, timeoutPromise])) as any;
+
+    assert.strictEqual(event.type, "event-loop-lag");
+    assert.ok(event.lagMs! >= 20);
+    assert.ok(event.profileDataPath, "Should have attached profileDataPath");
+    assert.strictEqual(
+      typeof event.profileDataPath,
+      "string",
+      "profileDataPath should be a valid string path",
+    );
+  });
+});

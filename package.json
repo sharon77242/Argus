@@ -1,0 +1,46 @@
+{
+  "name": "my-typescript-playground",
+  "version": "1.0.0",
+  "description": "TypeScript playground template with ESLint, Prettier, debugging, and watch mode",
+  "main": "dist/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node --experimental-strip-types src/index.ts",
+    "dev": "node --experimental-strip-types --watch src/index.ts",
+    "build:watch": "tsc --watch",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test --experimental-strip-types tests/**/*.test.ts tests/*.test.ts",
+    "test:watch": "node --test --experimental-strip-types --watch tests/**/*.test.ts tests/*.test.ts",
+    "test:coverage": "node --test --experimental-test-coverage --experimental-strip-types tests/**/*.test.ts tests/*.test.ts",
+    "validate": "npm run typecheck && npm run lint && npm run format:check && npm run test"
+  },
+  "keywords": [
+    "typescript",
+    "template",
+    "playground"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "@types/source-map": "^0.5.7",
+    "eslint": "^9.31.0",
+    "jiti": "^2.4.2",
+    "prettier": "^3.5.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.36.0"
+  },
+  "dependencies": {
+    "node-sql-parser": "^5.4.0",
+    "source-map": "^0.7.6"
+  }
+}
