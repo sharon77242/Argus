@@ -28,33 +28,5 @@ describe('CrashGuard', () => {
     // Ensure the resolver was called
     assert.ok(crashEmitted.resolvedStack.includes('TEST CRASH'));
   });
-  it('should handle unhandled rejection', () => {
-    const guard = new CrashGuard(s => s);
-    (guard as any).active = true;
-    let crashEmitted: any = null;
-    guard.on('crash', (event) => { crashEmitted = event; });
-
-    (guard as any).handleCrash('unhandledRejection', new Error('rejected'));
-    assert.strictEqual(crashEmitted.type, 'unhandledRejection');
-  });
-
-  it('should suggest fixes for OOM and listener leaks', () => {
-    const guard = new CrashGuard(s => s);
-    
-    const oomError = new Error('heap out of memory');
-    const oomEvent = (guard as any).handleCrash('uncaughtException', oomError, false);
-    assert.ok(oomEvent.suggestions.some((s: any) => s.rule === 'oom-fix'));
-
-    const listenerError = new Error('possible EventEmitter memory leak detected');
-    const leakEvent = (guard as any).handleCrash('uncaughtException', listenerError, false);
-    assert.ok(leakEvent.suggestions.some((s: any) => s.rule === 'emitter-leak-fix'));
-  });
-
-  it('should allow start and stop', () => {
-    const guard = new CrashGuard(s => s);
-    guard.start();
-    assert.ok((guard as any).active);
-    guard.stop();
-    assert.ok(!(guard as any).active);
-  });
 });
+

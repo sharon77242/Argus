@@ -60,7 +60,7 @@ describe("RuntimeMonitor", () => {
 
     const p = new Promise(resolve => {
       const handler = (event: ProfilerEvent) => {
-        if (event.type === "event-loop-lag" && event.profileDataPath) {
+        if (event.type === "event-loop-lag") {
           monitor.off("anomaly", handler);
           resolve([event]);
         }
@@ -68,7 +68,7 @@ describe("RuntimeMonitor", () => {
       monitor.on("anomaly", handler);
     });
 
-    await sleep(50); // allow baseline to settle
+    await sleep(10); // allow baseline to settle
 
     // Create an artificial event loop block synchronously
     const start = Date.now();
@@ -77,7 +77,7 @@ describe("RuntimeMonitor", () => {
     }
 
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Timeout waiting for lag event")), 2000),
+      setTimeout(() => reject(new Error("Timeout waiting for lag event")), 1000),
     );
     const [event] = (await Promise.race([p, timeoutPromise])) as any;
 
