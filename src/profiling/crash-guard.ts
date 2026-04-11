@@ -46,13 +46,13 @@ export class CrashGuard extends EventEmitter {
     if (!this.active) return;
 
     const resolvedStack = error.stack ? this.resolveStack(error.stack) : undefined;
-    
+
     const suggestions: FixSuggestion[] = [
       {
         severity: 'critical',
         rule: 'unhandled-crash',
-        message: type === 'unhandledRejection' 
-          ? 'An async Promise rejected without a .catch() or try/catch block, tearing down the container.'
+        message: type === 'unhandledRejection'
+          ? 'An async Promise rejected without a .catch() or try/catch block.'
           : 'A synchronous exception bypassed all try/catch blocks.',
         suggestedFix: 'Wrap the offending call in a try/catch or attach a .catch() to the Promise.',
       }
@@ -61,13 +61,17 @@ export class CrashGuard extends EventEmitter {
     const event: CrashEvent = { type, error, resolvedStack, suggestions };
     this.emit('crash', event);
 
-    // Give telemetry buffer 100ms to flush anomalies via synchronous sockets or pending fetches
-    // before physically shutting down the container
-    setTimeout(() => {
-      // In tests, we do not want to actually kill the runner, so we rely on test modes to mock process
-      if (process.env.NODE_ENV !== 'test') {
-        process.exit(1);
-      }
-    }, 100);
+    // Only uncaughtException represents an unrecoverable synchronous tear-down.
+    // unhandledRejection is observable/recoverable in Node ≥ 15 and should NOT kill
+    // the process — the app (or its framework) may have its own rejection handling.
+    if (type === 'uncaughtException') {
+      // Give telemetry buffer 100ms to flush before physically shutting down.
+      setTimeout(() => {
+        // In tests, we do not want to actually kill the runner.
+        if (process.env.NODE_ENV !== 'test') {
+          process.exit(1);
+        }
+      }, 100);
+    }
   }
 }

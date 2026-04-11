@@ -148,4 +148,26 @@ describe('QueryAnalyzer (coverage)', () => {
     const rule = suggestions.find(s => s.rule === 'no-select-star');
     assert.ok(rule, 'Should detect SELECT * via AST');
   });
+  // ── Bug Fix #5 regression: N+1 warning should fire on count >= threshold ───
+  it('[BUG FIX] N+1 warning should fire on 6th and 7th call, not just the 5th', () => {
+    const q = 'SELECT id FROM sessions WHERE token = ?';
+
+    // Calls 1-4: no warning
+    for (let i = 0; i < 4; i++) {
+      const s = analyzer.analyze(q);
+      assert.ok(!s.find(x => x.rule === 'n-plus-one'), `Should not warn on call ${i + 1}`);
+    }
+
+    // Call 5: first warning (threshold hit)
+    const s5 = analyzer.analyze(q);
+    assert.ok(s5.find(x => x.rule === 'n-plus-one'), 'Should warn on 5th call');
+
+    // Call 6: should ALSO warn (old === bug would silently skip this)
+    const s6 = analyzer.analyze(q);
+    assert.ok(s6.find(x => x.rule === 'n-plus-one'), '[BUG FIX] Should still warn on 6th call');
+
+    // Call 7: same
+    const s7 = analyzer.analyze(q);
+    assert.ok(s7.find(x => x.rule === 'n-plus-one'), '[BUG FIX] Should still warn on 7th call');
+  });
 });

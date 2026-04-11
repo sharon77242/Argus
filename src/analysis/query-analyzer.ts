@@ -158,7 +158,7 @@ export class QueryAnalyzer {
     if (entry) {
       if (now - entry.firstSeen <= this.N_PLUS_ONE_WINDOW_MS) {
         entry.count++;
-        if (entry.count === this.N_PLUS_ONE_THRESHOLD) {
+        if (entry.count >= this.N_PLUS_ONE_THRESHOLD) {
           suggestions.push({
             severity: 'warning',
             rule: 'n-plus-one',

@@ -328,4 +328,54 @@ describe('DiagnosticAgent (extended coverage)', () => {
     // stop() should cleanly remove driver patches — just verify no throw
     assert.doesNotThrow(() => agent!.stop());
   });
+
+  // ── Bug Fix #3 regression: stop() must null out ALL subsystem references ──
+  it('[BUG FIX] stop() should null out all subsystem instance references', async () => {
+    agent = await DiagnosticAgent.create()
+      .withHttpTracing()
+      .withFsTracing()
+      .withLogTracing()
+      .withCrashGuard()
+      .withResourceLeakMonitor({ handleThreshold: 999, intervalMs: 9999 })
+      .withQueryAnalysis()
+      .withRuntimeMonitor({ checkIntervalMs: 9999 })
+      .start();
+
+    // All subsystems should be alive
+    assert.ok((agent as any).httpTracker, 'httpTracker should exist after start');
+    assert.ok((agent as any).fsTracker, 'fsTracker should exist after start');
+    assert.ok((agent as any).logTracker, 'logTracker should exist after start');
+    assert.ok((agent as any).crashGuard, 'crashGuard should exist after start');
+    assert.ok((agent as any).leakMonitor, 'leakMonitor should exist after start');
+    assert.ok((agent as any).queryAnalyzer, 'queryAnalyzer should exist after start');
+    assert.ok((agent as any).monitor, 'monitor should exist after start');
+
+    agent.stop();
+    agent = null; // prevent afterEach double-stop
+
+    // All references must be null after stop()
+    const stopped = (agent as any); // agent is null — check via temporary
+    // Re-read via closure trick: create a new agent, stop it, inspect
+    const a = await DiagnosticAgent.create()
+      .withHttpTracing()
+      .withFsTracing()
+      .withLogTracing()
+      .withCrashGuard()
+      .withResourceLeakMonitor({ handleThreshold: 999, intervalMs: 9999 })
+      .withQueryAnalysis()
+      .withRuntimeMonitor({ checkIntervalMs: 9999 })
+      .start();
+
+    a.stop();
+
+    assert.strictEqual((a as any).httpTracker, null, 'httpTracker must be null after stop()');
+    assert.strictEqual((a as any).fsTracker, null, 'fsTracker must be null after stop()');
+    assert.strictEqual((a as any).logTracker, null, 'logTracker must be null after stop()');
+    assert.strictEqual((a as any).crashGuard, null, 'crashGuard must be null after stop()');
+    assert.strictEqual((a as any).leakMonitor, null, 'leakMonitor must be null after stop()');
+    assert.strictEqual((a as any).queryAnalyzer, null, 'queryAnalyzer must be null after stop()');
+    assert.strictEqual((a as any).monitor, null, 'monitor must be null after stop()');
+    assert.strictEqual((a as any).engine, null, 'engine must be null after stop()');
+    assert.strictEqual((a as any).aggregator, null, 'aggregator must be null after stop()');
+  });
 });

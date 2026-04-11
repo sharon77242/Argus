@@ -42,6 +42,9 @@ export function isAlreadyPatched(target: any, methodName: string): boolean {
  *   3. Config object:   client.query({ text: sql, values: [...] })
  */
 export function wrapMethod(target: any, methodName: string, driverName: string): void {
+  // Idempotency guard — skip if already patched to prevent duplicate activePatches entries
+  if (isAlreadyPatched(target, methodName)) return;
+
   const original = target[methodName];
   const channel = diagnostics_channel.channel(AUTO_PATCH_CHANNEL);
 

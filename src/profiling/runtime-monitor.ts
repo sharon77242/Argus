@@ -105,8 +105,10 @@ export class RuntimeMonitor extends EventEmitter {
 
     if (growth > this.options.memoryGrowthThresholdBytes!) {
       const snapPath = join(tmpdir(), `heap-snapshot-${Date.now()}.heapsnapshot`);
+      let heapSnapshotPath: string | undefined;
       try {
         writeHeapSnapshot(snapPath);
+        heapSnapshotPath = snapPath; // only set if write succeeded
       } catch (e) {
         this.emit("error", e);
       }
@@ -114,7 +116,7 @@ export class RuntimeMonitor extends EventEmitter {
       this.emit("anomaly", {
         type: "memory-leak",
         growthBytes: growth,
-        heapSnapshotPath: snapPath,
+        heapSnapshotPath,
         timestamp: Date.now(),
       } satisfies ProfilerEvent);
     }

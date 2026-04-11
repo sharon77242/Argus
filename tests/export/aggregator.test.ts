@@ -45,23 +45,25 @@ describe('MetricsAggregator', () => {
     assert.strictEqual(receivedEvents.length, 3);
   });
 
-  it('should only export the p99 outliers during high volume traffic', () => {
+  it('should only export the p99+ outliers during high volume traffic', () => {
     const agg = new MetricsAggregator(100);
-    
-    // Record 100 events
+
+    // Record 100 events with values 1..100
     for (let i = 1; i <= 100; i++) {
-        // Durations 1ms to 100ms
-        agg.record('query', i, { db: 'test' }); 
+      agg.record('query', i, { db: 'test' });
     }
 
     let receivedEvents: AggregatorEvent[] = [];
     agg.on('flush', (events) => receivedEvents = events);
 
     agg.flush();
-    
-    // p99 of 100 items means floor(0.99 * 100) = 99.
-    // It should keep indices 99 to 99 -> meaning 1 item (the max).
-    assert.strictEqual(receivedEvents.length, 1);
-    assert.strictEqual(receivedEvents[0].value, 100); // the 100ms query
+
+    // Correct p99 formula: Math.ceil(0.99 * 100) - 1 = 99 - 1 = 98
+    // Items at indices 98..99 are exported → values 99 and 100 (2 items)
+    // Old (buggy) formula Math.floor(0.99 * 100) = 99 only exported 1 item (the max).
+    assert.strictEqual(receivedEvents.length, 2, 'Should export 2 items: values at p99 and p100');
+    const values = receivedEvents.map(e => e.value).sort((a, b) => a - b);
+    assert.strictEqual(values[0], 99, 'p99 item should have value 99');
+    assert.strictEqual(values[1], 100, 'p100 item should have value 100');
   });
 });

@@ -107,4 +107,23 @@ describe('patch-utils (coverage)', () => {
     assert.strictEqual(mockProto.query, firstWrapped, 'Should not re-wrap');
     assert.strictEqual(activePatches.length, sizeBefore, 'Should not push another patch record');
   });
+
+  // ── Bug Fix #4 regression: wrapMethod must be idempotent ─────────────────
+  it('[BUG FIX] wrapMethod called twice should not push duplicate entries to activePatches', () => {
+    const mockProto = {
+      execute: (_sql: string) => 'result' as any
+    };
+
+    const countBefore = activePatches.length;
+
+    // First call: patches and records
+    wrapMethod(mockProto, 'execute', 'test-driver');
+    const countAfterFirst = activePatches.length;
+    assert.strictEqual(countAfterFirst, countBefore + 1, 'Should push one entry on first call');
+
+    // Second call: should be a no-op because isAlreadyPatched returns true
+    wrapMethod(mockProto, 'execute', 'test-driver');
+    assert.strictEqual(activePatches.length, countAfterFirst,
+      '[BUG FIX] wrapMethod must not push duplicate entries when called twice');
+  });
 });

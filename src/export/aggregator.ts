@@ -68,9 +68,11 @@ export class MetricsAggregator extends EventEmitter {
       // Sort ascending by metric value (e.g. latency, memory growth bytes)
       events.sort((a, b) => a.value - b.value);
       
-      // Calculate p99 index
-      // If we have 100 items, 0.99 * 100 = 99. Index 99 is the 100th item (the max).
-      const p99Index = Math.floor(0.99 * events.length);
+      // Calculate p99 index.
+      // Math.ceil(0.99 * n) - 1 correctly yields the 99th-percentile boundary.
+      // Example: n=100 → ceil(99) - 1 = 98 (the 99th item, 0-indexed).
+      // (The old Math.floor formula gave index 99 = the max = p100.)
+      const p99Index = Math.ceil(0.99 * events.length) - 1;
       
       // Push only the outliers (p99 and above)
       for (let i = p99Index; i < events.length; i++) {

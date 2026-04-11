@@ -128,11 +128,15 @@ export class InstrumentationEngine extends EventEmitter {
    */
   public extractSourceLine(): string | undefined {
     const backup = Error.prepareStackTrace;
-    Error.prepareStackTrace = (_, stack) => stack;
-    const err = new Error();
-    Error.captureStackTrace(err);
-    const stack = err.stack as unknown as NodeJS.CallSite[];
-    Error.prepareStackTrace = backup;
+    let stack: any;
+    try {
+      Error.prepareStackTrace = (_, s) => s;
+      const err = new Error();
+      Error.captureStackTrace(err);
+      stack = err.stack as unknown as NodeJS.CallSite[];
+    } finally {
+      Error.prepareStackTrace = backup;
+    }
 
     if (!Array.isArray(stack)) {
       // Fallback for when we couldn't hook V8 stack trace cleanly

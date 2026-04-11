@@ -487,6 +487,12 @@ export class DiagnosticAgent extends EventEmitter {
     this.aggregator = null;
     this.resolver = null;
     this.exporter = null;
+    this.httpTracker = null;
+    this.fsTracker = null;
+    this.logTracker = null;
+    this.crashGuard = null;
+    this.leakMonitor = null;
+    this.queryAnalyzer = null;
 
     this.running = false;
   }

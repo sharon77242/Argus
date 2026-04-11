@@ -165,4 +165,43 @@ describe('CrashGuard (coverage)', () => {
       done();
     }, 200);
   });
+
+  // ── Bug Fix #1 regression: unhandledRejection must NOT call process.exit ──
+  it('[BUG FIX] unhandledRejection should NOT call process.exit even in production', (_, done) => {
+    const originalEnv = process.env.NODE_ENV;
+    const originalExit = process.exit;
+
+    let exitCode: number | undefined;
+    (process as any).exit = (code: number) => { exitCode = code; };
+    process.env.NODE_ENV = 'production';
+
+    const guard = new CrashGuard();
+    (guard as any).active = true;
+
+    (guard as any).handleCrash('unhandledRejection', new Error('rejected promise'));
+
+    setTimeout(() => {
+      (process as any).exit = originalExit;
+      if (originalEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = originalEnv;
+
+      assert.strictEqual(exitCode, undefined, 'process.exit should NOT be called for unhandledRejection');
+      done();
+    }, 200);
+  });
+
+  it('[BUG FIX] unhandledRejection should still emit crash event without killing process', () => {
+    process.env.NODE_ENV = 'test';
+    const guard = new CrashGuard();
+    let event: any = null;
+    guard.on('crash', (e) => { event = e; });
+    (guard as any).active = true;
+
+    (guard as any).handleCrash('unhandledRejection', new Error('async failure'));
+
+    assert.ok(event, 'Should emit crash event');
+    assert.strictEqual(event.type, 'unhandledRejection');
+    // Message should NOT say "tearing down the container" anymore
+    assert.ok(!event.suggestions[0].message.includes('tearing down'), 'Should not say tearing down');
+  });
 });
