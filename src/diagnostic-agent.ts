@@ -84,6 +84,9 @@ export class DiagnosticAgent extends EventEmitter {
   // Private constructor — use DiagnosticAgent.create()
   private constructor() {
     super();
+    // High-frequency events (query, http, fs, log) may have many listeners
+    // in production apps. 0 = unlimited, suppresses Node's 'possible memory leak' warning.
+    this.setMaxListeners(0);
   }
 
   /**
@@ -131,7 +134,20 @@ export class DiagnosticAgent extends EventEmitter {
     const selectedType = config.appType || 'auto';
     if (selectedType === 'auto') {
       const detected = detectAppTypes(config.workspaceDir);
-      appTypes = detected.types.length > 0 ? detected.types : ['web'];
+      if (detected.types.length > 0) {
+        appTypes = detected.types;
+      } else {
+        // No recognized packages found — don’t silently assume 'web'.
+        // Emit a dev-time notice and apply no app-type-specific modules.
+        appTypes = [];
+        if (env !== 'prod') {
+          // Delay to after construction so listeners can attach
+          setImmediate(() => agent.emit('info',
+            'DiagnosticAgent: auto-detection found no recognized app type in package.json. ' +
+            'Pass appType explicitly ("web" | "db" | "worker") to enable app-specific monitoring.'
+          ));
+        }
+      }
     } else {
       appTypes = Array.isArray(selectedType) ? selectedType : [selectedType as AppType];
     }

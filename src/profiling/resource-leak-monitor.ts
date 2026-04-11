@@ -9,17 +9,22 @@ export interface ResourceLeakEvent {
 export interface ResourceLeakMonitorOptions {
   handleThreshold?: number;
   intervalMs?: number;
+  /** Minimum ms between repeated alerts for the same sustained leak. Default: 60_000 (1 min). */
+  alertCooldownMs?: number;
 }
 
 export class ResourceLeakMonitor extends EventEmitter {
   private timer: NodeJS.Timeout | null = null;
   private handleThreshold: number;
   private intervalMs: number;
+  private alertCooldownMs: number;
+  private lastAlertTime = 0;
 
   constructor(options: ResourceLeakMonitorOptions = {}) {
     super();
     this.handleThreshold = options.handleThreshold || 1000;
     this.intervalMs = options.intervalMs || 5000;
+    this.alertCooldownMs = options.alertCooldownMs ?? 60_000;
   }
 
   public start(): void {
@@ -46,6 +51,11 @@ export class ResourceLeakMonitor extends EventEmitter {
     const handlesCount = resources.length;
 
     if (handlesCount > this.handleThreshold) {
+      const now = Date.now();
+      // Rate-limit: suppress repeated alerts while handles stay elevated
+      if (now - this.lastAlertTime < this.alertCooldownMs) return;
+      this.lastAlertTime = now;
+
       const suggestions: FixSuggestion[] = [
         {
           severity: 'critical',

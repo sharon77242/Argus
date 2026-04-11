@@ -170,4 +170,60 @@ describe('QueryAnalyzer (coverage)', () => {
     const s7 = analyzer.analyze(q);
     assert.ok(s7.find(x => x.rule === 'n-plus-one'), '[BUG FIX] Should still warn on 7th call');
   });
+
+  // ── N+1 message differentiation: first-spike vs ongoing ──────────────────
+  it('[FIX] N+1 first warning should say "detected", subsequent should say "ongoing"', () => {
+    const q = 'SELECT name FROM products WHERE category = ?';
+
+    // Calls 1-4
+    for (let i = 0; i < 4; i++) analyzer.analyze(q);
+
+    // Call 5: first time >= threshold → "detected"
+    const s5 = analyzer.analyze(q);
+    const first = s5.find(x => x.rule === 'n-plus-one');
+    assert.ok(first, 'Should warn on 5th call');
+    assert.ok(first!.message.includes('detected'), 'First warning should say "detected"');
+    assert.ok(!first!.message.includes('ongoing'), 'First warning should NOT say "ongoing"');
+
+    // Call 6: already warned → "ongoing"
+    const s6 = analyzer.analyze(q);
+    const ongoing = s6.find(x => x.rule === 'n-plus-one');
+    assert.ok(ongoing, 'Should still warn on 6th call');
+    assert.ok(ongoing!.message.includes('ongoing'), '6th+ call should say "ongoing"');
+    assert.ok(!ongoing!.message.includes('detected'), '6th+ call should NOT say "detected"');
+  });
+
+  // ── N+1 warned flag resets after window expiry ────────────────────────────
+  it('[FIX] warned flag should reset when window expires, so first-spike message fires again', async () => {
+    const shortAnalyzer = new (class extends QueryAnalyzer {
+      constructor() {
+        super();
+        // Use 30ms window — long enough that 5 JS calls fit inside,
+        // but short enough that a 60ms sleep fully expires it.
+        (this as any).N_PLUS_ONE_WINDOW_MS = 30;
+      }
+    })();
+
+    const q = 'SELECT * FROM events WHERE type = ?';
+
+    // First spike: 5 calls → "detected" warning is emitted and entry.warned = true
+    for (let i = 0; i < 4; i++) shortAnalyzer.analyze(q);
+    const firstSpike = shortAnalyzer.analyze(q);
+    assert.ok(firstSpike.find(x => x.rule === 'n-plus-one'), 'Sanity: should warn on 5th call');
+    assert.ok(
+      firstSpike.find(x => x.rule === 'n-plus-one')!.message.includes('detected'),
+      'Sanity: first spike should say "detected"'
+    );
+
+    // Let 30ms window fully expire
+    await new Promise(r => setTimeout(r, 60));
+
+    // Second spike: 5 rapid calls after expiry → counter resets, warned=false
+    for (let i = 0; i < 4; i++) shortAnalyzer.analyze(q);
+    const secondSpike = shortAnalyzer.analyze(q); // 5th call of new window
+    const warn = secondSpike.find(x => x.rule === 'n-plus-one');
+    assert.ok(warn, 'Should warn again after window reset');
+    assert.ok(warn!.message.includes('detected'),
+      'Post-reset warning should say "detected" again (warned flag was reset)');
+  });
 });

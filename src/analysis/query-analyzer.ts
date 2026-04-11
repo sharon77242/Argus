@@ -9,7 +9,7 @@ import type { FixSuggestion } from './types.ts';
  */
 export class QueryAnalyzer {
   private parser: InstanceType<typeof Parser>;
-  private recentQueries: Map<string, { count: number; firstSeen: number }> = new Map();
+  private recentQueries: Map<string, { count: number; firstSeen: number; warned: boolean }> = new Map();
   private readonly N_PLUS_ONE_WINDOW_MS = 1000;
   private readonly N_PLUS_ONE_THRESHOLD = 5;
 
@@ -159,20 +159,33 @@ export class QueryAnalyzer {
       if (now - entry.firstSeen <= this.N_PLUS_ONE_WINDOW_MS) {
         entry.count++;
         if (entry.count >= this.N_PLUS_ONE_THRESHOLD) {
-          suggestions.push({
-            severity: 'warning',
-            rule: 'n-plus-one',
-            message: `This query pattern has been executed ${entry.count} times within ${this.N_PLUS_ONE_WINDOW_MS}ms. This is likely an N+1 query problem.`,
-            suggestedFix: 'Batch these queries into a single query using IN (...) or a JOIN.',
-          });
+          if (!entry.warned) {
+            // First time the threshold is crossed: high-signal initial spike
+            entry.warned = true;
+            suggestions.push({
+              severity: 'warning',
+              rule: 'n-plus-one',
+              message: `N+1 detected: this query pattern was executed ${entry.count} times within ${this.N_PLUS_ONE_WINDOW_MS}ms. This is likely an N+1 query problem.`,
+              suggestedFix: 'Batch these queries into a single query using IN (...) or a JOIN.',
+            });
+          } else {
+            // Subsequent crossings: lower-noise ongoing alert
+            suggestions.push({
+              severity: 'warning',
+              rule: 'n-plus-one',
+              message: `N+1 ongoing: query pattern executed ${entry.count} times (still within the same ${this.N_PLUS_ONE_WINDOW_MS}ms window).`,
+              suggestedFix: 'Batch these queries into a single query using IN (...) or a JOIN.',
+            });
+          }
         }
       } else {
         // Window expired — reset
         entry.count = 1;
         entry.firstSeen = now;
+        entry.warned = false;
       }
     } else {
-      this.recentQueries.set(normalized, { count: 1, firstSeen: now });
+      this.recentQueries.set(normalized, { count: 1, firstSeen: now, warned: false });
     }
 
     // Evict stale entries periodically

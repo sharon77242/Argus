@@ -378,4 +378,65 @@ describe('DiagnosticAgent (extended coverage)', () => {
     assert.strictEqual((a as any).engine, null, 'engine must be null after stop()');
     assert.strictEqual((a as any).aggregator, null, 'aggregator must be null after stop()');
   });
+
+  // ── [FIX] createProfile: no silent 'web' default when auto-detection fails ─
+  it('[FIX] createProfile with auto and no detected types should NOT attach web-specific modules', async () => {
+    // Point workspaceDir at a directory with no package.json to force empty detection
+    const emptyDir = os.tmpdir();
+    agent = DiagnosticAgent.createProfile({
+      environment: 'prod',
+      appType: 'auto',
+      workspaceDir: emptyDir,
+    });
+
+    await agent.start();
+
+    // In prod with no detection → no web modules should be wired up
+    assert.strictEqual((agent as any).httpTracker, null,
+      '[FIX] Should NOT attach httpTracker when no app type detected');
+    assert.strictEqual((agent as any).leakMonitor, null,
+      '[FIX] Should NOT attach leakMonitor when no app type detected');
+    assert.strictEqual((agent as any).engine, null,
+      '[FIX] Should NOT attach instrumentation engine when no app type detected');
+  });
+
+  it('[FIX] createProfile with auto and no detected types should emit info warning in dev mode', async () => {
+    // Create a clean workspace dir with a package.json that has no recognized DB/web packages
+    const workspaceDir = path.join(os.tmpdir(), `no-app-type-test-${Date.now()}`);
+    await fs.promises.mkdir(workspaceDir, { recursive: true });
+    await fs.promises.writeFile(
+      path.join(workspaceDir, 'package.json'),
+      JSON.stringify({ name: 'empty-test', dependencies: {} })
+    );
+
+    agent = DiagnosticAgent.createProfile({
+      environment: 'dev',
+      appType: 'auto',
+      workspaceDir,
+    });
+
+    const infoMessages: string[] = [];
+    agent.on('info', (msg: string) => infoMessages.push(msg));
+
+    // Suppress SourceMapResolver errors from scanning the empty workspace
+    agent.on('error', () => {});
+
+    await agent.start();
+
+    // setImmediate fires after start() returns
+    await new Promise(r => setImmediate(r));
+
+    assert.ok(infoMessages.length > 0, '[FIX] Should emit info event when auto-detection finds nothing');
+    assert.ok(infoMessages[0].includes('auto-detection'), 'Info message should mention auto-detection');
+
+    // Cleanup (best-effort: SourceMapResolver may still hold handles on Windows)
+    try { await fs.promises.rm(workspaceDir, { recursive: true, force: true }); } catch { /* EBUSY */ }
+  });
+
+  // ── [FIX] setMaxListeners(0): no false memory leak warnings ────────────────
+  it('[FIX] DiagnosticAgent should have unlimited listeners (setMaxListeners(0))', () => {
+    const a = DiagnosticAgent.create();
+    assert.strictEqual(a.getMaxListeners(), 0,
+      '[FIX] setMaxListeners(0) should have been called in constructor');
+  });
 });

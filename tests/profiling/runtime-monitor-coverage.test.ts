@@ -135,6 +135,49 @@ describe('RuntimeMonitor (coverage)', () => {
     }
   });
 
+  // ── safePositiveInt: NaN / negative / zero env-vars fall back to defaults ──
+  it('[FIX] safePositiveInt: NaN env-var should fall back to default', () => {
+    const orig = process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS;
+    process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS = 'not-a-number';
+    try {
+      monitor = new RuntimeMonitor();
+      const opts = (monitor as any).options;
+      assert.strictEqual(opts.checkIntervalMs, 1000,
+        'NaN env-var should fall back to default (1000)');
+    } finally {
+      if (orig === undefined) delete process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS;
+      else process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS = orig;
+    }
+  });
+
+  it('[FIX] safePositiveInt: negative env-var should fall back to default', () => {
+    const orig = process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS;
+    process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS = '-100';
+    try {
+      monitor = new RuntimeMonitor();
+      const opts = (monitor as any).options;
+      assert.strictEqual(opts.eventLoopThresholdMs, 50,
+        'Negative env-var should fall back to default (50)');
+    } finally {
+      if (orig === undefined) delete process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS;
+      else process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS = orig;
+    }
+  });
+
+  it('[FIX] safePositiveInt: zero env-var should fall back to default', () => {
+    const orig = process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS;
+    process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS = '0';
+    try {
+      monitor = new RuntimeMonitor();
+      const opts = (monitor as any).options;
+      assert.strictEqual(opts.cpuProfileDurationMs, 500,
+        'Zero env-var should fall back to default (500)');
+    } finally {
+      if (orig === undefined) delete process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS;
+      else process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS = orig;
+    }
+  });
+
   // ── stop() when inspectorSession is active ────────────────────────────────
   it('stop() should disconnect an active inspector session', () => {
     monitor = new RuntimeMonitor({ checkIntervalMs: 9999 });

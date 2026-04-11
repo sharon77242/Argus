@@ -23,6 +23,13 @@ export interface ProfilerEvent {
   timestamp: number;
 }
 
+/** Parses an env-var integer and falls back to the default if the result is NaN or ≤ 0. */
+function safePositiveInt(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export class RuntimeMonitor extends EventEmitter {
   private elMonitor: IntervalHistogram;
   private intervalTimer: NodeJS.Timeout | null = null;
@@ -39,29 +46,19 @@ export class RuntimeMonitor extends EventEmitter {
     this.options = {
       eventLoopThresholdMs:
         options.eventLoopThresholdMs ??
-        (process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS
-          ? parseInt(process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS)
-          : 50),
+        safePositiveInt(process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS, 50),
       memoryGrowthThresholdBytes:
         options.memoryGrowthThresholdBytes ??
-        (process.env.RUNTIME_MONITOR_MEMORY_GROWTH_BYTES
-          ? parseInt(process.env.RUNTIME_MONITOR_MEMORY_GROWTH_BYTES)
-          : 10 * 1024 * 1024),
+        safePositiveInt(process.env.RUNTIME_MONITOR_MEMORY_GROWTH_BYTES, 10 * 1024 * 1024),
       cpuProfileCooldownMs:
         options.cpuProfileCooldownMs ??
-        (process.env.RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS
-          ? parseInt(process.env.RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS)
-          : 60000),
+        safePositiveInt(process.env.RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS, 60000),
       checkIntervalMs:
         options.checkIntervalMs ??
-        (process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS
-          ? parseInt(process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS)
-          : 1000),
+        safePositiveInt(process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS, 1000),
       cpuProfileDurationMs:
         options.cpuProfileDurationMs ??
-        (process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS
-          ? parseInt(process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS)
-          : 500),
+        safePositiveInt(process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS, 500),
     };
 
     this.elMonitor = monitorEventLoopDelay({ resolution: 10 });
