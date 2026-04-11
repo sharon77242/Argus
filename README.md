@@ -1,227 +1,425 @@
 # Deep Diagnostic Agent
 
-A privacy-first, ultra-lightweight performance profiling & diagnostics agent natively built for Node.js (v22+). 
+> **Privacy-first, zero-compilation performance profiling & diagnostics for Node.js v22+**
 
-Designed to be integrated directly into your Node.js application, this agent silently tracks runtime execution, isolates bottlenecks, and mathematically sanitizes all context before exporting OpenTelemetry (OTLP) data to your AI analysis endpoint.
+A lightweight agent that embeds directly into your application — silently tracking runtime behaviour, isolating bottlenecks, and mathematically sanitizing all context before exporting OpenTelemetry (OTLP) telemetry to your observability stack.
 
-## Features
+---
 
-- **Absolute Data Privacy**: Implements multi-layered SQL/NoSQL AST sanitization and string-level **Shannon Entropy checks** to physically strip database values, PII, and leaked security tokens (JWTs, API Keys) out of telemetry data **and** `console` logs.
-- **Native Zero-Compilation TypeScript**: Fully optimized around Node v22.6+ `--experimental-strip-types`, enabling strict TS typing without heavy transpile architectures.
-- **Event Loop & Memory Profiling**: Native Integration with V8 and `node:perf_hooks` captures Event Loop Lag > 50ms and captures `.heapsnapshot` and `.cpuprofile` bursts completely automatically.
-- **Actionable AI-Ready Diagnostics**: Enriches metrics with AST-based query analysis, background TS/ESLint issue tracking, **HTTP inspection**, and **File System blocking detection** to generate concrete fix suggestions alongside raw anomalies.
-- **Statistical Throttling**: Implements p99 anomaly aggregation via sliding windows to guarantee high-value diagnostic exports without risking AI-API rate-limiting or DDoS spam scenarios.
-- **Zero-Monkeypatch Instrumentation**: Hooks natively into `node:diagnostics_channel` for robust, standard-compliant query and HTTP interception without prototype pollution, supporting an auto-patching safety net across **16 databases**.
+## Table of Contents
 
-## Quick Start
-*Note: This agent expects Node v22.6.0+.*
+1. [Why This Exists](#why-this-exists)
+2. [Requirements](#requirements)
+3. [Installation](#installation)
+4. [Quick Start](#quick-start)
+5. [Profile API (recommended)](#profile-api-recommended)
+   - [Environment Presets](#environment-presets)
+   - [App Type Presets](#app-type-presets)
+   - [Auto-Detection](#auto-detection)
+6. [Builder API (fine-grained)](#builder-api-fine-grained)
+7. [Events Reference](#events-reference)
+8. [Environment Variables](#environment-variables)
+9. [Production Safety Reference](#production-safety-reference)
+10. [Privacy Guarantees](#privacy-guarantees)
+11. [Project Structure](#project-structure)
+12. [Low-Level API](#low-level-api)
+13. [License](#license)
+
+---
+
+## Why This Exists
+
+Standard APM products either require heavy agents, compile steps, or sacrifice data privacy by shipping raw query values and log payloads to the cloud. This agent takes a different position:
+
+- **100% in-process** — no sidecar, no daemon, no compilation
+- **AST-first privacy** — SQL/NoSQL query values are shredded at the AST layer before they ever touch a metric
+- **Entropy-checked logs** — Shannon entropy scanning strips JWT tokens, API keys, and any other high-entropy string from `console` payloads automatically
+- **Zero prototype pollution** — all DB interception goes through `node:diagnostics_channel`, the official Node.js observability primitive
+
+---
+
+## Requirements
+
+| Requirement | Version |
+|---|---|
+| Node.js | **≥ 22.6.0** (native `--experimental-strip-types`) |
+| TypeScript | Any — no compilation step needed |
+| npm | ≥ 9 |
+
+> [!IMPORTANT]
+> Node.js **22.6.0+** is required for native type-stripping. The agent uses `node:test`, `node:inspector`, `node:perf_hooks`, and `node:v8` — no polyfills, no transpilation.
+
+---
+
+## Installation
 
 ```bash
+# Clone / copy into your project
 npm install
-npm test           # Runs the native test suite ensuring zero-leakage constraints
+
+# Verify — 202 tests, zero failures
+npm test
 ```
 
-## Architecture Layers
+---
 
-1. **`SourceMapResolver`:** Translates minified stack traces back to exact TypeScript code dynamically.
-2. **`RuntimeMonitor`:** Listens for event loop starvation and memory leaks.
-3. **`InstrumentationEngine`:** Captures DB/IO executions using standardized diagnostics channels.
-4. **`AstSanitizer` & `EntropyChecker`:** The firewall. Mathematically shreds secrets from the payloads.
-5. **`MetricsAggregator` & `OTLPExporter`:** Rolls data across intervals to extract p99 variants, pushing OTLP JSON via Mutually Authenticated TLS.
-
-## Integrating into your Application
+## Quick Start
 
 ```typescript
 import { DiagnosticAgent } from './src/index.ts';
 
-// 1. Highly optimized preset Profile loading
 const agent = await DiagnosticAgent.createProfile({
-  enabled: process.env.NODE_ENV !== 'local', // Globally disables with ZERO CPU overhead
-  environment: 'prod',                       // Auto-enables CrashGuard, LeakMonitor, etc.
-  appType: ['web', 'db'],                    // Mix types — modules are unioned automatically
+  environment: 'prod',   // or 'dev' | 'test'
+  appType: ['web', 'db'],
+}).start();
+
+// Graceful shutdown (flushes remaining telemetry)
+process.on('SIGTERM', () => agent.stop());
+```
+
+---
+
+## Profile API (recommended)
+
+`createProfile` returns a pre-configured builder instance wired for your environment and app type. Call `.start()` to initialize all subsystems.
+
+```typescript
+const agent = await DiagnosticAgent.createProfile({
+  environment: 'prod',        // 'dev' | 'test' | 'prod'
+  appType: ['web', 'db'],     // single string or array — modules are unioned
+  enabled: true,              // overridden by DIAGNOSTIC_AGENT_ENABLED env-var
+  workspaceDir: process.cwd(),
 }).start();
 ```
 
-#### Profile Presets & Optimization
+### Environment Presets
 
-The `createProfile` API uses intelligent defaults based on your environment and the nature of your application.
-`appType` accepts a single type **or an array** — when multiple types are provided, their modules are **unioned** (duplicates are harmless since each `.with*()` call is idempotent):
+| `environment` | Modules Enabled | Optimization Target |
+|---|---|---|
+| `prod` | CrashGuard, LogTracing | **Stability** — minimal overhead, high safety |
+| `dev` | `prod` + FsTracing, StaticScanner, AuditScanner, SourceMaps | **Forensics** — deep blocking & security analysis |
+| `test` | `prod` + FsTracing, StaticScanner, AuditScanner, SourceMaps | **Forensics** — same as `dev` |
 
-| Category | Option | Components Enabled | Optimization Target |
-| --- | --- | --- | --- |
-| **Env** | `prod` | CrashGuard, LogTracing | **Stability**: Minimal overhead, high safety. |
-|  | `dev`, `test` | `prod` + FsTracing, StaticScanner, AuditScanner, SourceMaps | **Forensics**: Deep blocking & security analysis. |
-| **App** | `'web'` | HttpTracing, Socket Leak Monitor, Auto-Patching | **Latency**: Request/Response & Socket tracking. |
-|  | `'db'` | QueryAnalysis, Connection Leak Monitor, Auto-Patching | **DataAccess**: Query patterns & connection safety. |
-|  | `'worker'` | RuntimeMonitor (CPU/Mem), Handle Leak Monitor, Auto-Patching | **Throughput**: Long-running safety & loop health. |
-|  | `['web','db']` | Union of `web` + `db` modules | **Hybrid**: Full HTTP + Query coverage. |
-|  | `['web','db','worker']` | All modules active | **Full-Stack**: Maximum observability. |
+### App Type Presets
 
-#### Hybrid / Mixed App Types
+| `appType` | Modules Enabled | Optimization Target |
+|---|---|---|
+| `'web'` | HttpTracing, Socket Leak Monitor, Auto-Patching | **Latency** — request/response & socket tracking |
+| `'db'` | QueryAnalysis, Connection Leak Monitor, Auto-Patching | **Data Access** — query patterns & connection safety |
+| `'worker'` | RuntimeMonitor (CPU/Mem), Handle Leak Monitor, Auto-Patching | **Throughput** — long-running safety & loop health |
+| `['web','db']` | Union of `web` + `db` | **Hybrid** — full HTTP + query coverage |
+| `['web','db','worker']` | All modules | **Full-Stack** — maximum observability |
 
-Real-world services often fill multiple roles — an Express API that also runs background jobs, or a worker that queries a database. Pass an array to `appType` to compose their diagnostics:
+Each `.with*()` call is **idempotent** — combining types never double-registers a module.
+
+#### Multi-role examples
 
 ```typescript
-// API server that also does heavy background processing
+// Express API + background job runner
 DiagnosticAgent.createProfile({ appType: ['web', 'worker'] });
 
 // Worker that queries databases directly
 DiagnosticAgent.createProfile({ appType: ['db', 'worker'] });
 
-// Monolith — everything
+// Monolith — full coverage
 DiagnosticAgent.createProfile({ appType: ['web', 'db', 'worker'] });
-
-// Single type still works (backward compatible)
-DiagnosticAgent.createProfile({ appType: 'web' });
 ```
 
-#### Auto-Detection (Default: `appType: 'auto'`)
+### Auto-Detection
 
-Don't know your app type? Let the agent figure it out. By default, `appType` is set to `'auto'`, and it will scan your `package.json` dependencies against known fingerprints:
+Leave `appType` unset (or set it to `'auto'`) and the agent will scan your `package.json` dependencies to infer the correct profile:
 
 ```typescript
-// Scans package.json automatically → detects express=web, pg=db, bullmq=worker
 const agent = await DiagnosticAgent.createProfile({
   environment: 'prod',
   // appType: 'auto' is the default
 }).start();
+
+// agent.on('info', msg => console.log(msg))  ← fires in dev/test if nothing is detected
 ```
 
-You can also call the detector standalone for logging or debugging:
+You can also call the detector standalone:
 
 ```typescript
 const result = DiagnosticAgent.detectAppTypes('./my-service');
-console.log(result);
 // { types: ['web', 'db'], matches: { web: ['express', 'cors'], db: ['pg', 'ioredis'], worker: [] } }
 ```
 
-**Recognized packages** (non-exhaustive):
+**Recognized fingerprints (non-exhaustive):**
 
 | Type | Packages |
-| --- | --- |
+|---|---|
 | `web` | express, fastify, koa, @hapi/hapi, @nestjs/core, next, nuxt, socket.io, ws, apollo-server, … |
 | `db` | pg, mysql2, mongodb, mongoose, sequelize, typeorm, @prisma/client, knex, redis, ioredis, mssql, … |
 | `worker` | bull, bullmq, agenda, bee-queue, pg-boss, node-cron, amqplib, kafkajs, piscina, … |
 
-If no packages match, `'auto'` falls back to `'web'`.
+> [!NOTE]
+> If no packages match and `environment` is `dev` or `test`, the agent emits an `'info'` event advising you to set `appType` explicitly. In `prod`, it starts silently with only the environment-level modules (CrashGuard, LogTracing).
 
-### 2. OR Compose manually for fine-grained control:
+---
+
+## Builder API (fine-grained)
+
+For maximum control, compose the agent manually using the fluent builder:
+
 ```typescript
 import { DiagnosticAgent } from './src/index.ts';
 import fs from 'node:fs';
 
-const manualAgent = await DiagnosticAgent.create()
-  .withSourceMaps('./dist')                        
-  .withRuntimeMonitor({ eventLoopThresholdMs: 50 }) 
-  .withInstrumentation({ autoPatching: true })      // 16 DB drivers (MySQL, Mongo, Redis, etc)
-  .withHttpTracing()                                // Detect insecure / slow HTTP requests
-  .withLogTracing({ scrubContext: true })           // Shred tokens from console overrides
-  .withFsTracing()                                  // [Not Prod Safe] Detects sync FS blockers
-  .withCrashGuard()                                 // Catches uncaughtException/unhandledRejection gracefully
-  .withResourceLeakMonitor({ handleThreshold: 5000 })// Detects OS handle/socket leaks
-  .withExporter({                                   
+const agent = await DiagnosticAgent.create()
+  .withSourceMaps('./dist')                          // Source-map resolution for stack traces
+  .withRuntimeMonitor({ eventLoopThresholdMs: 50 }) // Event loop lag + memory leak detection
+  .withInstrumentation({ autoPatching: true })       // 16 DB drivers via diagnostics_channel
+  .withHttpTracing()                                 // Slow request & insecure HTTP detection
+  .withLogTracing({ scrubContext: true })            // Strip secrets from console overrides
+  .withFsTracing()                                   // ⚠ DEV ONLY — sync FS blocker detection
+  .withCrashGuard()                                  // uncaughtException telemetry flush
+  .withResourceLeakMonitor({
+    handleThreshold: 5000,
+    alertCooldownMs: 60_000,                         // Min ms between repeated leak alerts
+  })
+  .withQueryAnalysis()                               // AST-based N+1 & query fix suggestions
+  .withStaticScanner(process.cwd())                 // ⚠ DEV ONLY — background tsc/eslint
+  .withAuditScanner(process.cwd())                  // ⚠ DEV ONLY — npm audit CVE scan
+  .withExporter({
     endpointUrl: 'https://otel.example.com/v1/traces',
     key:  fs.readFileSync('./certs/client.key'),
     cert: fs.readFileSync('./certs/client.crt'),
     ca:   fs.readFileSync('./certs/ca.crt'),
   })
-  .withQueryAnalysis()                              
-  .withStaticScanner(process.cwd())                 
-  .withAuditScanner(process.cwd())                  // Scans for dependency vulnerabilities 
   .start();
-
-// Listen to raw events if needed
-agent.on('anomaly', (event) => console.log('Anomaly:', event.type));
-agent.on('query',   (trace) => console.log('Query:', trace.sanitizedQuery));
-
-// Manually trace a query (for drivers without diagnostics_channel support)
-const rows = await agent.traceQuery('SELECT * FROM orders WHERE id = $1', async () => {
-  return db.query('SELECT * FROM orders WHERE id = $1', [42]);
-});
-
-// Graceful shutdown
-agent.stop();
 ```
 
-Every `.with*()` method is **optional** — enable only what you need. The builder handles all internal event wiring, entropy scrubbing, and p99 aggregation automatically.
+Every `.with*()` method is **optional** — enable only what you need. All internal event wiring, entropy scrubbing, and p99 aggregation happens automatically.
 
-## Builder API & Production Safety Reference
+### Manually tracing unsupported drivers
+
+For drivers that don't publish to `diagnostics_channel`, use `traceQuery`:
+
+```typescript
+const rows = await agent.traceQuery(
+  'SELECT * FROM orders WHERE id = $1',
+  () => db.query('SELECT * FROM orders WHERE id = $1', [42])
+);
+```
+
+---
+
+## Events Reference
+
+The agent is an `EventEmitter`. All events are emitted on the `DiagnosticAgent` instance:
+
+| Event | Payload | When |
+|---|---|---|
+| `'anomaly'` | `ProfilerEvent` | Memory leak, event loop lag, CPU spike detected |
+| `'query'` | `{ sanitizedQuery, driverName, durationMs, suggestions }` | DB query completed |
+| `'http'` | `{ method, url, statusCode, durationMs, suggestions }` | HTTP request completed |
+| `'fs'` | `{ operation, path, durationMs, suggestions }` | File system operation completed |
+| `'log'` | `{ level, sanitizedPayload, suggestions }` | `console.*` call intercepted |
+| `'crash'` | `CrashEvent` | `uncaughtException` or `unhandledRejection` received |
+| `'leak'` | `ResourceLeakEvent` | Active OS handle count exceeded threshold |
+| `'info'` | `string` | Advisory messages (e.g., auto-detection found nothing) |
+| `'error'` | `Error` | Non-fatal internal error (e.g., heap snapshot write failed) |
+
+```typescript
+agent.on('anomaly', (event) => {
+  console.log(event.type);            // 'memory-leak' | 'event-loop-lag' | 'cpu-spike'
+  console.log(event.heapSnapshotPath); // set only when snapshot write succeeded
+});
+
+agent.on('crash', (event) => {
+  console.log(event.type);            // 'uncaughtException' | 'unhandledRejection'
+  // NOTE: unhandledRejection does NOT call process.exit — your app keeps running
+});
+
+agent.on('query', (trace) => {
+  console.log(trace.sanitizedQuery);  // values NEVER appear here — AST-scrubbed
+  trace.suggestions.forEach(s => console.log(s.rule, s.suggestedFix));
+});
+```
+
+> [!NOTE]
+> `DiagnosticAgent` calls `setMaxListeners(0)` internally — you can attach as many listeners as needed without triggering Node's memory leak warning.
+
+---
+
+## Environment Variables
+
+All thresholds can be overridden without code changes, making the agent CI/CD and container-friendly:
+
+| Variable | Default | Controls |
+|---|---|---|
+| `DIAGNOSTIC_AGENT_ENABLED` | `true` | Set to `false` or `0` for a zero-CPU-overhead global kill-switch |
+| `RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS` | `50` | Minimum lag (ms) before an event-loop anomaly fires |
+| `RUNTIME_MONITOR_MEMORY_GROWTH_BYTES` | `10485760` (10 MB) | Minimum heap growth before a memory-leak anomaly fires |
+| `RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS` | `60000` | Minimum ms between back-to-back CPU profiles |
+| `RUNTIME_MONITOR_CHECK_INTERVAL_MS` | `1000` | How often thresholds are polled |
+| `RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS` | `500` | Duration of each CPU profile capture |
+
+> [!TIP]
+> Malformed values (non-numeric, `0`, negative) are silently ignored and replaced with the default. This means misconfigured infrastructure cannot accidentally disable monitoring.
+
+---
+
+## Production Safety Reference
 
 | Method | Prod Safe? | Resource Impact | Description |
-| --- | --- | --- | --- |
-| `DiagnosticAgent.createProfile(config)`| ✅ Yes | N/A | Returns an intelligently pre-configured instance based on env/app presets |
-| `DiagnosticAgent.create()` | ✅ Yes | N/A | Returns a new unconfigured builder instance |
-| `.withSourceMaps(dir?)` | ✅ Yes | Very Low | Enable source-map resolution for stack traces |
-| `.withRuntimeMonitor(opts?)`| ✅ Yes | Low | Enable event loop lag + memory leak detection |
-| `.withCrashGuard()` | ✅ Yes | Very Low | Catch unhandled rejections/exceptions and flush telemetry before exiting |
-| `.withResourceLeakMonitor()`| ✅ Yes | Low | Track OS active resources/handles to catch TCP/File connection leaks |
-| `.withInstrumentation(opts?)`| ✅ Yes | Low | Enable DB/IO tracing via `diagnostics_channel` |
-| `.withHttpTracing()` | ✅ Yes | Low | Enable Native HTTP tracing & slow request analysis |
-| `.withLogTracing(opts?)` | ✅ Yes | Low | Overrides `console` to strip secrets & analyze logs |
-| `.withFsTracing()` | ❌ **No** | **High** | Patches `fs`. Warns on *Sync blockers. DEV ONLY. |
-| `.withQueryAnalysis()` | ✅ Yes | Medium (AST) | Enrich queries with N+1 patterns & fix suggestions |
-| `.withStaticScanner(dir)` | ❌ **No** | **High** | Fires background `tsc`/`eslint` scans. DEV ONLY. |
-| `.withAuditScanner(dir)` | ❌ **No** | **High** | Spawns `npm audit` to check dependency CVEs. DEV/Startup ONLY. |
-| `.withExporter(config)` | ✅ Yes | Very Low | Ship telemetry over OTLP with mTLS |
-| `.withAggregatorWindow(ms)` | Override p99 sliding window (default: 60s) |
-| `.withEntropyThreshold(n)` | Override Shannon entropy secret detection threshold (default: 4.0) |
-| `.start()` | Async — initialize all subsystems and begin monitoring |
-| `.stop()` | Sync — tear down everything and flush remaining data |
+|---|---|---|---|
+| `DiagnosticAgent.createProfile(config)` | ✅ Yes | N/A | Pre-configured instance from env/app presets |
+| `DiagnosticAgent.create()` | ✅ Yes | N/A | Unconfigured fluent builder |
+| `.withSourceMaps(dir?)` | ✅ Yes | Very Low | Source-map resolution for minified stack traces |
+| `.withRuntimeMonitor(opts?)` | ✅ Yes | Low | Event loop lag + memory leak detection |
+| `.withCrashGuard()` | ✅ Yes | Very Low | Intercepts `uncaughtException`; emits event for `unhandledRejection` |
+| `.withResourceLeakMonitor(opts?)` | ✅ Yes | Low | Tracks OS handles; rate-limited by `alertCooldownMs` |
+| `.withInstrumentation(opts?)` | ✅ Yes | Low | DB/IO tracing via `diagnostics_channel` (16 drivers) |
+| `.withHttpTracing()` | ✅ Yes | Low | HTTP request inspection & slow-request detection |
+| `.withLogTracing(opts?)` | ✅ Yes | Low | `console.*` override with entropy-scrubbed payloads |
+| `.withFsTracing()` | ❌ **No** | High | Patches `fs`. Detects `*Sync` blockers. **DEV ONLY.** |
+| `.withQueryAnalysis()` | ✅ Yes | Medium (AST) | N+1 detection + query fix suggestions |
+| `.withStaticScanner(dir)` | ❌ **No** | High | Background `tsc`/ESLint scan. **DEV ONLY.** |
+| `.withAuditScanner(dir)` | ❌ **No** | High | Spawns `npm audit`. **DEV/startup ONLY.** |
+| `.withExporter(config)` | ✅ Yes | Very Low | OTLP JSON export over mTLS |
+| `.withAggregatorWindow(ms)` | ✅ Yes | None | Override p99 sliding window (default: 60 s) |
+| `.withEntropyThreshold(n)` | ✅ Yes | None | Override Shannon entropy threshold (default: 4.0) |
+| `.start()` | — | — | Async — initialize all subsystems and begin monitoring |
+| `.stop()` | — | — | Sync — tear down and flush remaining telemetry |
+
+---
+
+## Privacy Guarantees
+
+### What this agent collects
+
+- Query **structure** (SQL/NoSQL operation type, tables, columns, clauses)
+- HTTP method, URL path (no query-string), status code, duration
+- Event loop lag duration (ms)
+- Heap growth (bytes)
+- File path + operation type (no file contents)
+- Log level + message (after entropy scrubbing)
+
+### What this agent never collects
+
+| Data Class | Mechanism |
+|---|---|
+| SQL / NoSQL bound values | AST-level replacement — values are replaced before the string is ever stored |
+| High-entropy strings (JWTs, API keys, tokens) | Shannon entropy check (default threshold: 4.0 bits/char) |
+| PII in log messages | Entropy scrubbing on all `console.*` payloads |
+| Raw file contents | Only `path` and `operation` are recorded |
+| Heap object values | Only growth delta in bytes is recorded |
+
+### Transport security
+
+Telemetry is exported over **mTLS** (Mutual TLS) — both client and server certificates are verified. No telemetry is sent without explicit `.withExporter(config)` configuration.
+
+---
+
+## Architecture Layers
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  DiagnosticAgent                     │  ← Fluent builder / event bus
+├─────────────┬──────────────────────┬────────────────┤
+│ Profiling   │  Instrumentation     │  Analysis      │
+│ ─────────── │  ────────────────── │  ────────────  │
+│ RuntimeMon  │  InstrumentEngine   │  QueryAnalyzer │
+│ CrashGuard  │  16 DB Drivers      │  StaticScanner │
+│ LeakMonitor │  HttpTracer         │  AuditScanner  │
+│ SrcMapRes.  │  FsTracer / Logger  │                │
+├─────────────┴──────────────────────┴────────────────┤
+│          AstSanitizer + EntropyChecker              │  ← Privacy firewall (always on)
+├─────────────────────────────────────────────────────┤
+│        MetricsAggregator (p99 sliding window)        │
+├─────────────────────────────────────────────────────┤
+│              OTLPExporter (mTLS)                     │
+└─────────────────────────────────────────────────────┘
+```
+
+---
 
 ## Project Structure
 
 ```
 src/
   index.ts                         → Public API barrel export
-  diagnostic-agent.ts              → Fluent builder API (recommended entry point)
+  diagnostic-agent.ts              → Fluent builder + createProfile API
 
   profiling/
+    app-type-detector.ts           → package.json fingerprint scanner
     runtime-monitor.ts             → Event loop lag & heap snapshot profiling
+    crash-guard.ts                 → uncaughtException / unhandledRejection handler
+    resource-leak-monitor.ts       → OS handle / socket leak detection
     source-map-resolver.ts         → .js.map scanning & lazy resolution
 
   instrumentation/
-    engine.ts                      → Core InstrumentationEngine class
+    engine.ts                      → Core InstrumentationEngine
+    http.ts                        → HTTP request tracing
+    fs.ts                          → File system operation tracing
+    logger.ts                      → console.* override with entropy scrubbing
     drivers/
       index.ts                     → Driver registry (apply / remove patches)
-      patch-utils.ts               → Shared wrapping utilities & types
+      patch-utils.ts               → Shared wrapping utilities & PATCHED_SYMBOL
       pg.ts                        → PostgreSQL
       mysql.ts                     → MySQL / Aurora (mysql2)
       mongodb.ts                   → MongoDB
-      bigquery.ts                  → Google BigQuery
-      elasticsearch.ts             → Elasticsearch
+      mssql.ts                     → MSSQL / tedious
+      sqlite.ts                    → better-sqlite3
+      prisma.ts                    → @prisma/client
       redis.ts                     → ioredis + node-redis
-      mssql.ts                     → mssql + tedious
+      dynamodb.ts                  → @aws-sdk/client-dynamodb
+      firestore.ts                 → @google-cloud/firestore
+      cassandra.ts                 → cassandra-driver
+      elasticsearch.ts             → @elastic/elasticsearch
+      bigquery.ts                  → @google-cloud/bigquery
+      neo4j.ts                     → neo4j-driver
+      clickhouse.ts                → @clickhouse/client
 
   sanitization/
     ast-sanitizer.ts               → SQL AST scrubbing (node-sql-parser)
     entropy-checker.ts             → Shannon entropy secret detection
 
   analysis/
-    types.ts                       → Analysis type contracts
-    query-analyzer.ts              → AST-based query fix suggestions (Level 1)
-    static-scanner.ts              → Background code issue tracking (Level 2)
+    types.ts                       → Shared FixSuggestion & analysis types
+    query-analyzer.ts              → AST-based query fix suggestions + N+1 detection
+    fs-analyzer.ts                 → Sync FS blocker & path traversal detection
+    http-analyzer.ts               → Insecure URL & slow request detection
+    log-analyzer.ts                → Log storm & payload size detection
+    static-scanner.ts              → Background tsc / ESLint issue tracking
+    audit-scanner.ts               → npm audit CVE scanning
 
   export/
-    aggregator.ts                  → P99 sliding window metric aggregation
+    aggregator.ts                  → p99 sliding window metric aggregation
     exporter.ts                    → OTLP JSON formatter + mTLS transport
 
-tests/                             → Mirrors src/ structure (66 tests)
+tests/                             → Mirrors src/ structure (202 tests, 43 suites)
+```
 
-## Advanced: Low-Level API
+---
 
-For fine-grained control, all subsystem classes are exported individually:
+## Low-Level API
+
+All subsystems are exported individually for advanced composition:
 
 ```typescript
 import {
   SourceMapResolver,
   RuntimeMonitor,
   InstrumentationEngine,
+  CrashGuard,
+  ResourceLeakMonitor,
   AstSanitizer,
   EntropyChecker,
   MetricsAggregator,
   OTLPExporter,
+  QueryAnalyzer,
 } from './src/index.ts';
+
+// Example: standalone entropy checker
+import { EntropyChecker } from './src/index.ts';
+const checker = new EntropyChecker();
+const sanitized = checker.scrub('Bearer eyJhbGc...');  // → 'Bearer [REDACTED]'
 ```
+
+---
 
 ## License
 
