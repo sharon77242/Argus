@@ -38,21 +38,72 @@ import { DiagnosticAgent } from './src/index.ts';
 const agent = await DiagnosticAgent.createProfile({
   enabled: process.env.NODE_ENV !== 'local', // Globally disables with ZERO CPU overhead
   environment: 'prod',                       // Auto-enables CrashGuard, LeakMonitor, etc.
-  appType: 'web',                            // Tunes for HTTP, Web Sockets, Request Latency
+  appType: ['web', 'db'],                    // Mix types — modules are unioned automatically
 }).start();
 ```
 
 #### Profile Presets & Optimization
 
-The `createProfile` API uses intelligent defaults based on your environment and the nature of your application:
+The `createProfile` API uses intelligent defaults based on your environment and the nature of your application.
+`appType` accepts a single type **or an array** — when multiple types are provided, their modules are **unioned** (duplicates are harmless since each `.with*()` call is idempotent):
 
 | Category | Option | Components Enabled | Optimization Target |
 | --- | --- | --- | --- |
 | **Env** | `prod` | CrashGuard, LogTracing | **Stability**: Minimal overhead, high safety. |
 |  | `dev`, `test` | `prod` + FsTracing, StaticScanner, AuditScanner, SourceMaps | **Forensics**: Deep blocking & security analysis. |
-| **App** | `web` | HttpTracing, Socket Leak Monitor, Auto-Patching | **Latency**: Request/Response & Socket tracking. |
-|  | `db` | QueryAnalysis, Connection Leak Monitor, Auto-Patching | **DataAccess**: Query patterns & connection safety. |
-|  | `worker` | RuntimeMonitor (CPU/Mem), Handle Leak Monitor, Auto-Patching | **Throughput**: Long-running safety & loop health. |
+| **App** | `'web'` | HttpTracing, Socket Leak Monitor, Auto-Patching | **Latency**: Request/Response & Socket tracking. |
+|  | `'db'` | QueryAnalysis, Connection Leak Monitor, Auto-Patching | **DataAccess**: Query patterns & connection safety. |
+|  | `'worker'` | RuntimeMonitor (CPU/Mem), Handle Leak Monitor, Auto-Patching | **Throughput**: Long-running safety & loop health. |
+|  | `['web','db']` | Union of `web` + `db` modules | **Hybrid**: Full HTTP + Query coverage. |
+|  | `['web','db','worker']` | All modules active | **Full-Stack**: Maximum observability. |
+
+#### Hybrid / Mixed App Types
+
+Real-world services often fill multiple roles — an Express API that also runs background jobs, or a worker that queries a database. Pass an array to `appType` to compose their diagnostics:
+
+```typescript
+// API server that also does heavy background processing
+DiagnosticAgent.createProfile({ appType: ['web', 'worker'] });
+
+// Worker that queries databases directly
+DiagnosticAgent.createProfile({ appType: ['db', 'worker'] });
+
+// Monolith — everything
+DiagnosticAgent.createProfile({ appType: ['web', 'db', 'worker'] });
+
+// Single type still works (backward compatible)
+DiagnosticAgent.createProfile({ appType: 'web' });
+```
+
+#### Auto-Detection (Default: `appType: 'auto'`)
+
+Don't know your app type? Let the agent figure it out. By default, `appType` is set to `'auto'`, and it will scan your `package.json` dependencies against known fingerprints:
+
+```typescript
+// Scans package.json automatically → detects express=web, pg=db, bullmq=worker
+const agent = await DiagnosticAgent.createProfile({
+  environment: 'prod',
+  // appType: 'auto' is the default
+}).start();
+```
+
+You can also call the detector standalone for logging or debugging:
+
+```typescript
+const result = DiagnosticAgent.detectAppTypes('./my-service');
+console.log(result);
+// { types: ['web', 'db'], matches: { web: ['express', 'cors'], db: ['pg', 'ioredis'], worker: [] } }
+```
+
+**Recognized packages** (non-exhaustive):
+
+| Type | Packages |
+| --- | --- |
+| `web` | express, fastify, koa, @hapi/hapi, @nestjs/core, next, nuxt, socket.io, ws, apollo-server, … |
+| `db` | pg, mysql2, mongodb, mongoose, sequelize, typeorm, @prisma/client, knex, redis, ioredis, mssql, … |
+| `worker` | bull, bullmq, agenda, bee-queue, pg-boss, node-cron, amqplib, kafkajs, piscina, … |
+
+If no packages match, `'auto'` falls back to `'web'`.
 
 ### 2. OR Compose manually for fine-grained control:
 ```typescript

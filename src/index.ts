@@ -29,6 +29,7 @@ export * from "./profiling/runtime-monitor.ts";
 export * from "./profiling/source-map-resolver.ts";
 export * from "./profiling/crash-guard.ts";
 export * from "./profiling/resource-leak-monitor.ts";
+export * from "./profiling/app-type-detector.ts";
 
 // Instrumentation (Core)
 export * from "./instrumentation/engine.ts";

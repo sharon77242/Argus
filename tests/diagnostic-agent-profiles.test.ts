@@ -34,4 +34,59 @@ describe('DiagnosticAgent Profiles', () => {
     const agent = DiagnosticAgent.createProfile(config);
     assert.ok(agent);
   });
+
+  // ── Mixed / Hybrid App Types ──────────────────────────────────
+
+  it('should accept an array of app types (web + db)', () => {
+    const config: AgentProfileConfig = { environment: 'prod', appType: ['web', 'db'] };
+    const agent = DiagnosticAgent.createProfile(config);
+    assert.ok(agent);
+  });
+
+  it('should accept an array of app types (web + worker)', () => {
+    const config: AgentProfileConfig = { environment: 'prod', appType: ['web', 'worker'] };
+    const agent = DiagnosticAgent.createProfile(config);
+    assert.ok(agent);
+  });
+
+  it('should accept all three app types combined (web + db + worker)', () => {
+    const config: AgentProfileConfig = { environment: 'prod', appType: ['web', 'db', 'worker'] };
+    const agent = DiagnosticAgent.createProfile(config);
+    assert.ok(agent);
+  });
+
+  it('should start and stop cleanly with a mixed profile', async () => {
+    const config: AgentProfileConfig = { environment: 'dev', appType: ['web', 'db', 'worker'], workspaceDir: process.cwd() };
+    const agent = DiagnosticAgent.createProfile(config);
+    await agent.start();
+    assert.strictEqual(agent.isRunning, true);
+    agent.stop();
+    assert.strictEqual(agent.isRunning, false);
+  });
+
+  it('should still accept a single string appType (backward compat)', () => {
+    const config: AgentProfileConfig = { environment: 'prod', appType: 'web' };
+    const agent = DiagnosticAgent.createProfile(config);
+    assert.ok(agent);
+  });
+
+  // ── Auto-Detection ────────────────────────────────────────────
+
+  it('should accept appType "auto" and create a valid agent', () => {
+    const config: AgentProfileConfig = { environment: 'prod', appType: 'auto' };
+    const agent = DiagnosticAgent.createProfile(config);
+    assert.ok(agent);
+  });
+
+  it('should auto-detect with workspaceDir and create a valid agent', () => {
+    const config: AgentProfileConfig = { environment: 'dev', appType: 'auto', workspaceDir: process.cwd() };
+    const agent = DiagnosticAgent.createProfile(config);
+    assert.ok(agent);
+  });
+
+  it('should expose a static detectAppTypes() method', () => {
+    const result = DiagnosticAgent.detectAppTypes();
+    assert.ok(Array.isArray(result.types));
+    assert.ok(result.matches);
+  });
 });

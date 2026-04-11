@@ -15,11 +15,14 @@ import { LoggerInstrumentation, type LoggerOptions, type TracedLog } from './ins
 import { CrashGuard, type CrashEvent } from './profiling/crash-guard.ts';
 import { ResourceLeakMonitor, type ResourceLeakMonitorOptions, type ResourceLeakEvent } from './profiling/resource-leak-monitor.ts';
 import { AuditScanner } from './analysis/audit-scanner.ts';
+import { detectAppTypes, type DetectionResult } from './profiling/app-type-detector.ts';
+
+export type AppType = 'web' | 'db' | 'worker';
 
 export interface AgentProfileConfig {
   enabled?: boolean;
   environment?: 'dev' | 'test' | 'prod';
-  appType?: 'web' | 'db' | 'worker';
+  appType?: 'auto' | AppType | AppType[];
   workspaceDir?: string;
 }
 
@@ -91,8 +94,20 @@ export class DiagnosticAgent extends EventEmitter {
   }
 
   /**
+   * Scans the nearest `package.json` and returns the detected app types
+   * based on known package fingerprints (frameworks, DB drivers, queues).
+   *
+   * @param baseDir  Directory to look for `package.json` (defaults to `process.cwd()`).
+   */
+  public static detectAppTypes(baseDir?: string): DetectionResult {
+    return detectAppTypes(baseDir);
+  }
+
+  /**
    * Generates a preconfigured DiagnosticAgent using highly optimized presets based on environment and application types.
    * Includes an `enabled` flag to return a true zero-overhead NoOp agent.
+   *
+   * Set `appType` to `'auto'` to auto-detect from `package.json` dependencies.
    */
   public static createProfile(config: AgentProfileConfig): DiagnosticAgent {
     const agent = new DiagnosticAgent();
@@ -110,7 +125,16 @@ export class DiagnosticAgent extends EventEmitter {
     }
 
     const env = config.environment || 'prod';
-    const app = config.appType || 'web';
+
+    // Resolve app types — 'auto' triggers package.json scanning
+    let appTypes: AppType[];
+    const selectedType = config.appType || 'auto';
+    if (selectedType === 'auto') {
+      const detected = detectAppTypes(config.workspaceDir);
+      appTypes = detected.types.length > 0 ? detected.types : ['web'];
+    } else {
+      appTypes = Array.isArray(selectedType) ? selectedType : [selectedType as AppType];
+    }
 
     // 1. Universal Production Safe Bindings
     agent.withCrashGuard();
@@ -126,19 +150,22 @@ export class DiagnosticAgent extends EventEmitter {
       }
     }
 
-    // 3. Application Type Optimization
-    if (app === 'web') {
-      agent.withHttpTracing();
-      agent.withResourceLeakMonitor(); // Catch Sockets
-      agent.withInstrumentation({ autoPatching: true }); // Catch remote db calls
-    } else if (app === 'db') {
-      agent.withQueryAnalysis();
-      agent.withInstrumentation({ autoPatching: true });
-      agent.withResourceLeakMonitor(); // Catch Db connection leaks
-    } else if (app === 'worker') {
-      agent.withRuntimeMonitor(); // Catch memory leaks/CPU hangs heavily
-      agent.withResourceLeakMonitor();
-      agent.withInstrumentation({ autoPatching: true });
+    // 3. Application Type Optimization — union modules from all specified types.
+    //    Each `with*()` call is idempotent, so duplicates across types are harmless.
+    for (const app of appTypes) {
+      if (app === 'web') {
+        agent.withHttpTracing();
+        agent.withResourceLeakMonitor(); // Catch Sockets
+        agent.withInstrumentation({ autoPatching: true }); // Catch remote db calls
+      } else if (app === 'db') {
+        agent.withQueryAnalysis();
+        agent.withInstrumentation({ autoPatching: true });
+        agent.withResourceLeakMonitor(); // Catch Db connection leaks
+      } else if (app === 'worker') {
+        agent.withRuntimeMonitor(); // Catch memory leaks/CPU hangs heavily
+        agent.withResourceLeakMonitor();
+        agent.withInstrumentation({ autoPatching: true });
+      }
     }
 
     return agent;
