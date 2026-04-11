@@ -1,0 +1,31 @@
+# ── Stage 1: Build the DiagnosticAgent (CJS output needed by this app) ─────────
+FROM node:22-alpine AS agent-build
+WORKDIR /agent
+
+# Copy the full agent source
+COPY ./package*.json ./
+RUN npm ci
+
+COPY . ./
+RUN npm run build:cjs
+
+# ── Stage 2: Production image for the Quotes API ───────────────────────────────
+FROM node:22-alpine AS production
+WORKDIR /src
+
+# Install app dependencies
+COPY ./quotes-demo-app/package*.json ./
+RUN npm ci --omit=dev
+
+# Copy app source
+COPY ./quotes-demo-app ./
+
+# Copy the pre-built CJS bundle and its runtime deps from the agent build stage
+COPY --from=agent-build /agent/dist/cjs ./dist/cjs
+COPY --from=agent-build /agent/node_modules ./agent_modules
+
+EXPOSE 3000
+ENV NODE_ENV=production
+ENV NODE_PATH=/src/agent_modules
+
+CMD ["node", "./bin/www"]

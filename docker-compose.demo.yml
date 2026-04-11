@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./quotes-demo-app/db/init.sql:/docker-entrypoint-initdb.d/create_tables.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Quotes REST API + DiagnosticAgent ────────────────────────────────────────
+  api:
+    build:
+      context: ./               # root context — both agent + app are sub-folders
+      dockerfile: Dockerfile.demo
+    image: quotes-api-with-agent
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: postgres
+
+      # ─── DiagnosticAgent kill-switch ────────────────────────────────────────
+      #  Set to "false" or "0" for zero-overhead passthrough.
+      #  Set to "true" or "1" (or leave unset) to enable.
+      DIAGNOSTIC_AGENT_ENABLED: "true"
+
+volumes:
+  db_data:
+    driver: local

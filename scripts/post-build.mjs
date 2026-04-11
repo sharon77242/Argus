@@ -60,4 +60,8 @@ function processFile(filePath) {
 }
 
 walk(CJS_DIR);
+
+// Patch _require.cjs to use import.meta.url-free CJS-safe implementation
+// (the TS source uses __filename which is correct for CJS — nothing to patch here)
+
 console.log('✅  CJS post-build complete: .js → .cjs, .d.ts → .d.cts');
