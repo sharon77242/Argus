@@ -1,6 +1,6 @@
 # Deep Diagnostic Agent
 
-> **Privacy-first, zero-compilation performance profiling & diagnostics for Node.js v22+**
+> **Privacy-first performance profiling & diagnostics for Node.js — minimum Node 18.7 as a compiled package, Node 22.6 for source/dev mode**
 
 A lightweight agent that embeds directly into your application — silently tracking runtime behaviour, isolating bottlenecks, and mathematically sanitizing all context before exporting OpenTelemetry (OTLP) telemetry to your observability stack.
 
@@ -31,7 +31,7 @@ A lightweight agent that embeds directly into your application — silently trac
 
 Standard APM products either require heavy agents, compile steps, or sacrifice data privacy by shipping raw query values and log payloads to the cloud. This agent takes a different position:
 
-- **100% in-process** — no sidecar, no daemon, no compilation
+- **100% in-process** — no sidecar, no daemon, no separate process
 - **AST-first privacy** — SQL/NoSQL query values are shredded at the AST layer before they ever touch a metric
 - **Entropy-checked logs** — Shannon entropy scanning strips JWT tokens, API keys, and any other high-entropy string from `console` payloads automatically
 - **Zero prototype pollution** — all DB interception goes through `node:diagnostics_channel`, the official Node.js observability primitive
@@ -40,25 +40,63 @@ Standard APM products either require heavy agents, compile steps, or sacrifice d
 
 ## Requirements
 
-| Requirement | Version |
-|---|---|
-| Node.js | **≥ 22.6.0** (native `--experimental-strip-types`) |
-| TypeScript | Any — no compilation step needed |
-| npm | ≥ 9 |
+The agent has two distinct usage modes with different Node.js requirements:
+
+| Usage Mode | Min Node.js | When to use |
+|---|---|---|
+| **Compiled npm package** _(recommended for most users)_ | **≥ 18.7.0** | You install the built package in your project via npm |
+| **Source / dev mode** _(this repo, contributors)_ | **≥ 22.6.0** | You run `.ts` files directly with `--experimental-strip-types` |
 
 > [!IMPORTANT]
-> Node.js **22.6.0+** is required for native type-stripping. The agent uses `node:test`, `node:inspector`, `node:perf_hooks`, and `node:v8` — no polyfills, no transpilation.
+> **Most users should use the compiled package** and only need Node ≥ 18.7.0.
+> The 22.6.0 requirement only applies to running the TypeScript source files directly (e.g. contributors, or the `npm test` / `npm start` scripts in this repo).
+
+### Why 18.7.0 as the compiled minimum?
+
+The binding constraint is `node:diagnostics_channel`, which became stable in **Node 18.7.0**. Everything else the agent uses (`node:perf_hooks`, `node:v8`, `node:inspector`, `node:fs/promises`) has been available since Node 14+. Once this package is compiled to JavaScript, `--experimental-strip-types` is irrelevant — the consumer runs plain `.js`.
+
+### ESM requirement
+
+This package is published as **ESM** (`"type": "module"`). CommonJS projects cannot `require()` it directly:
+
+```js
+// ❌ CommonJS — will throw ERR_REQUIRE_ESM
+const { DiagnosticAgent } = require('deep-diagnostic-agent');
+
+// ✅ CommonJS — use dynamic import instead
+const { DiagnosticAgent } = await import('deep-diagnostic-agent');
+
+// ✅ ESM — works natively
+import { DiagnosticAgent } from 'deep-diagnostic-agent';
+```
 
 ---
 
 ## Installation
 
+### Using the compiled package in your project (Node ≥ 18.7)
+
 ```bash
-# Clone / copy into your project
+npm install deep-diagnostic-agent
+```
+
+Then import from the compiled entry point:
+
+```typescript
+import { DiagnosticAgent } from 'deep-diagnostic-agent';
+```
+
+### Building from source (Node ≥ 22.6, contributors only)
+
+```bash
+git clone <repo>
 npm install
 
-# Verify — 202 tests, zero failures
+# Run all 202 tests
 npm test
+
+# Compile to JS (outputs to dist/)
+npm run build
 ```
 
 ---
@@ -66,7 +104,11 @@ npm test
 ## Quick Start
 
 ```typescript
-import { DiagnosticAgent } from './src/index.ts';
+// Compiled npm package
+import { DiagnosticAgent } from 'deep-diagnostic-agent';
+
+// Or if running source directly (Node 22.6+)
+// import { DiagnosticAgent } from './src/index.ts';
 
 const agent = await DiagnosticAgent.createProfile({
   environment: 'prod',   // or 'dev' | 'test'
@@ -163,7 +205,7 @@ const result = DiagnosticAgent.detectAppTypes('./my-service');
 For maximum control, compose the agent manually using the fluent builder:
 
 ```typescript
-import { DiagnosticAgent } from './src/index.ts';
+import { DiagnosticAgent } from 'deep-diagnostic-agent';
 import fs from 'node:fs';
 
 const agent = await DiagnosticAgent.create()
@@ -411,13 +453,15 @@ import {
   MetricsAggregator,
   OTLPExporter,
   QueryAnalyzer,
-} from './src/index.ts';
+} from 'deep-diagnostic-agent';
 
 // Example: standalone entropy checker
-import { EntropyChecker } from './src/index.ts';
+import { EntropyChecker } from 'deep-diagnostic-agent';
 const checker = new EntropyChecker();
 const sanitized = checker.scrub('Bearer eyJhbGc...');  // → 'Bearer [REDACTED]'
 ```
+
+> **Source mode (contributors):** replace `'deep-diagnostic-agent'` with `'./src/index.ts'` and run with `node --experimental-strip-types` on Node 22.6+.
 
 ---
 
