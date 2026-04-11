@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import { nodeRequire } from './_require.ts';
 import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
 
 /**
@@ -7,9 +7,8 @@ import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
  * (GetItem, PutItem, Query, Scan, etc.).
  */
 export function patchDynamodb(): boolean {
-  const require = createRequire(import.meta.url);
   try {
-    const dynamodb = require('@aws-sdk/client-dynamodb');
+    const dynamodb = nodeRequire('@aws-sdk/client-dynamodb');
     const proto = dynamodb.DynamoDBClient?.prototype;
     if (proto?.send && !isAlreadyPatched(proto, 'send')) {
       wrapMethod(proto, 'send', '@aws-sdk/client-dynamodb');
@@ -19,7 +18,7 @@ export function patchDynamodb(): boolean {
 
   // Also try the document client
   try {
-    const docClient = require('@aws-sdk/lib-dynamodb');
+    const docClient = nodeRequire('@aws-sdk/lib-dynamodb');
     const proto = docClient.DynamoDBDocumentClient?.prototype;
     if (proto?.send && !isAlreadyPatched(proto, 'send')) {
       wrapMethod(proto, 'send', '@aws-sdk/lib-dynamodb');

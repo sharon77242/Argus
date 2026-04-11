@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import { nodeRequire } from './_require.ts';
 import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
 
 /**
@@ -7,9 +7,8 @@ import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
  * are generated dynamically per-schema and harder to intercept generically.
  */
 export function patchPrisma(): boolean {
-  const require = createRequire(import.meta.url);
   try {
-    const prisma = require('@prisma/client');
+    const prisma = nodeRequire('@prisma/client');
     const proto = prisma.PrismaClient?.prototype;
     if (!proto) return false;
 

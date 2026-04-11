@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import { nodeRequire } from './_require.ts';
 import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
 
 const MONGODB_METHODS = [
@@ -10,9 +10,8 @@ const MONGODB_METHODS = [
 ] as const;
 
 export function patchMongodb(): boolean {
-  const require = createRequire(import.meta.url);
   try {
-    const mongodb = require('mongodb');
+    const mongodb = nodeRequire('mongodb');
     const collProto = mongodb.Collection?.prototype;
     if (!collProto) return false;
 

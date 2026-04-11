@@ -1,13 +1,12 @@
-import { createRequire } from 'node:module';
+import { nodeRequire } from './_require.ts';
 import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
 
 export function patchMssql(): boolean {
-  const require = createRequire(import.meta.url);
   let patched = false;
 
   // mssql (high-level driver)
   try {
-    const mssql = require('mssql');
+    const mssql = nodeRequire('mssql');
     const reqProto = mssql.Request?.prototype;
     if (reqProto) {
       for (const method of ['query', 'execute', 'batch'] as const) {
@@ -21,7 +20,7 @@ export function patchMssql(): boolean {
 
   // tedious (low-level driver)
   try {
-    const tedious = require('tedious');
+    const tedious = nodeRequire('tedious');
     const connProto = tedious.Connection?.prototype;
     if (connProto) {
       for (const method of ['execSql', 'execSqlBatch'] as const) {

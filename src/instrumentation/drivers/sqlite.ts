@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import { nodeRequire } from './_require.ts';
 import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
 
 /**
@@ -7,9 +7,8 @@ import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
  * We patch `Database.prototype.prepare` to wrap returned statements.
  */
 export function patchBetterSqlite3(): boolean {
-  const require = createRequire(import.meta.url);
   try {
-    const Database = require('better-sqlite3');
+    const Database = nodeRequire('better-sqlite3');
     const proto = Database?.prototype;
     if (!proto) return false;
 

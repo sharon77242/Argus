@@ -1,12 +1,11 @@
-import { createRequire } from 'node:module';
+import { nodeRequire } from './_require.ts';
 import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
 
 const ES_METHODS = ['search', 'index', 'bulk', 'delete', 'update', 'get', 'msearch'] as const;
 
 export function patchElasticsearch(): boolean {
-  const require = createRequire(import.meta.url);
   try {
-    const elastic = require('@elastic/elasticsearch');
+    const elastic = nodeRequire('@elastic/elasticsearch');
     const esProto = elastic.Client?.prototype;
     if (!esProto) return false;
 

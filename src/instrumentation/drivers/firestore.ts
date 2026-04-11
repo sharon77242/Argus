@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import { nodeRequire } from './_require.ts';
 import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
 
 /**
@@ -8,9 +8,8 @@ import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
  * - `Query.prototype.get` for query execution
  */
 export function patchFirestore(): boolean {
-  const require = createRequire(import.meta.url);
   try {
-    const firestore = require('@google-cloud/firestore');
+    const firestore = nodeRequire('@google-cloud/firestore');
     let patched = false;
 
     // Firestore instance-level

@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import { nodeRequire } from './_require.ts';
 import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
 
 /**
@@ -6,9 +6,8 @@ import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
  * methods: query, insert, exec, command.
  */
 export function patchClickhouse(): boolean {
-  const require = createRequire(import.meta.url);
   try {
-    const clickhouse = require('@clickhouse/client');
+    const clickhouse = nodeRequire('@clickhouse/client');
 
     // The package exports a createClient factory — we need to find the
     // prototype of the client it produces.

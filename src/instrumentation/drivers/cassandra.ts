@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+import { nodeRequire } from './_require.ts';
 import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
 
 /**
@@ -6,9 +6,8 @@ import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
  * and `Client.prototype.batch` for query execution.
  */
 export function patchCassandra(): boolean {
-  const require = createRequire(import.meta.url);
   try {
-    const cassandra = require('cassandra-driver');
+    const cassandra = nodeRequire('cassandra-driver');
     const proto = cassandra.Client?.prototype;
     if (!proto) return false;
 

@@ -1,10 +1,9 @@
-import { createRequire } from 'node:module';
+import { nodeRequire } from './_require.ts';
 import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
 
 export function patchBigquery(): boolean {
-  const require = createRequire(import.meta.url);
   try {
-    const bq = require('@google-cloud/bigquery');
+    const bq = nodeRequire('@google-cloud/bigquery');
     const bqProto = bq.BigQuery?.prototype;
     if (!bqProto) return false;
 

@@ -1,10 +1,9 @@
-import { createRequire } from 'node:module';
+import { nodeRequire } from './_require.ts';
 import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
 
 export function patchIoredis(): boolean {
-  const require = createRequire(import.meta.url);
   try {
-    const IORedis = require('ioredis');
+    const IORedis = nodeRequire('ioredis');
     if (IORedis?.prototype?.sendCommand && !isAlreadyPatched(IORedis.prototype, 'sendCommand')) {
       wrapMethod(IORedis.prototype, 'sendCommand', 'ioredis');
       return true;
@@ -14,9 +13,8 @@ export function patchIoredis(): boolean {
 }
 
 export function patchNodeRedis(): boolean {
-  const require = createRequire(import.meta.url);
   try {
-    const redis = require('redis');
+    const redis = nodeRequire('redis');
     const clientProto = redis.RedisClient?.prototype ?? redis.createClient?.()?.constructor?.prototype;
     if (clientProto?.sendCommand && !isAlreadyPatched(clientProto, 'sendCommand')) {
       wrapMethod(clientProto, 'sendCommand', 'redis');
