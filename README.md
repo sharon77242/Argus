@@ -55,19 +55,19 @@ The agent has two distinct usage modes with different Node.js requirements:
 
 The binding constraint is `node:diagnostics_channel`, which became stable in **Node 18.7.0**. Everything else the agent uses (`node:perf_hooks`, `node:v8`, `node:inspector`, `node:fs/promises`) has been available since Node 14+. Once this package is compiled to JavaScript, `--experimental-strip-types` is irrelevant — the consumer runs plain `.js`.
 
-### ESM requirement
+### ESM & CJS — both supported
 
-This package is published as **ESM** (`"type": "module"`). CommonJS projects cannot `require()` it directly:
+This package ships a **dual build**: ESM and CommonJS. Node.js picks the right format automatically via the `exports` field — no config needed on your side.
 
 ```js
-// ❌ CommonJS — will throw ERR_REQUIRE_ESM
+// ✅ ESM project (type:module or .mjs)
+import { DiagnosticAgent } from 'deep-diagnostic-agent';
+
+// ✅ CommonJS project — require() works directly
 const { DiagnosticAgent } = require('deep-diagnostic-agent');
 
-// ✅ CommonJS — use dynamic import instead
+// ✅ CommonJS project — dynamic import also works
 const { DiagnosticAgent } = await import('deep-diagnostic-agent');
-
-// ✅ ESM — works natively
-import { DiagnosticAgent } from 'deep-diagnostic-agent';
 ```
 
 ---
@@ -92,11 +92,32 @@ import { DiagnosticAgent } from 'deep-diagnostic-agent';
 git clone <repo>
 npm install
 
-# Run all 202 tests
+# Run all 202 tests (uses --experimental-strip-types, requires Node 22.6+)
 npm test
 
-# Compile to JS (outputs to dist/)
+# Build both ESM and CJS outputs
 npm run build
+#   └─ build:esm  → tsc -p tsconfig.build.json  → dist/esm/**/*.js  + .d.ts
+#   └─ build:cjs  → tsc -p tsconfig.cjs.json    → dist/cjs/**/*.cjs + .d.cts
+#                   (post-build script renames .js → .cjs, .d.ts → .d.cts)
+
+# Build only one format if needed
+npm run build:esm
+npm run build:cjs
+```
+
+The published `dist/` directory contains:
+
+```
+dist/
+  esm/          ← consumed by import / ESM bundlers
+    index.js
+    index.d.ts
+    ...
+  cjs/          ← consumed by require() / CommonJS bundlers
+    index.cjs
+    index.d.cts
+    ...
 ```
 
 ---
