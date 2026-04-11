@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { CrashGuard } from '../../src/profiling/crash-guard.ts';
-import { EventEmitter } from 'node:events';
 
 describe('CrashGuard', () => {
   it('should intercept uncaught exceptions and emit suggestions', () => {

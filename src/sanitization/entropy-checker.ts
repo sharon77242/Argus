@@ -25,7 +25,7 @@ export class EntropyChecker {
    * A token is considered a secret if its length is >= 16 characters
    * and its Shannon entropy is greater than the threshold (default 4.0).
    */
-  public static scrubHighEntropyStrings(input: string, threshold: number = 4.0): string {
+  public static scrubHighEntropyStrings(input: string, threshold = 4.0): string {
     // Split on common delimiters that separate words/tokens in JSON, URLs, Headers, or SQL
     const tokens = input.split(/([\s=,;'"()\[\]{}]+)/);
     

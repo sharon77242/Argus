@@ -30,16 +30,19 @@ export class HttpInstrumentation extends EventEmitter {
     
     // Subscribe natively to Node.js HTTP/HTTPS requests 
     // This avoids prototype pollution entirely.
-    this.channelListener = (message: any) => {
-      const request = message.request;
+    this.channelListener = (message: unknown) => {
+      const msg = message as Record<string, unknown>;
+      const request = msg.request as Record<string, unknown> | undefined;
       if (!request) return;
 
       const start = performance.now();
-      const method = request.method || 'GET';
-      const url = `${request.protocol || 'http:'}//${request.host || ''}${request.path || '/'}`;
+      const method = (request.method as string | undefined) ?? 'GET';
+      const protocol = (request.protocol as string | undefined) ?? 'http:';
+      const host = (request.host as string | undefined) ?? '';
+      const path = (request.path as string | undefined) ?? '/';
+      const url = `${protocol}//${host}${path}`;
       const sourceLine = this.getSourceLine();
 
-      // Hook onto the request lifecycle to calculate duration
       const onEnd = (statusCode?: number, errMessage?: string) => {
         const durationMs = performance.now() - start;
         const suggestions = this.analyzer.analyze(method, url, durationMs);
@@ -58,17 +61,14 @@ export class HttpInstrumentation extends EventEmitter {
         this.emit('request', traced);
       };
 
-      request.once('response', (res: any) => {
-        // Response started, wait for it to finish or just use response arrival as timing
-        // Usually measuring time-to-first-byte (response arrival) or time-to-finish.
-        // Let's use close event for total duration.
-        res.once('close', () => {
-          onEnd(res.statusCode);
-        });
+      const req = request as unknown as { once: (event: string, cb: (...a: unknown[]) => void) => void };
+      req.once('response', (res: unknown) => {
+        const r = res as { once: (event: string, cb: () => void) => void; statusCode?: number };
+        r.once('close', () => { onEnd(r.statusCode); });
       });
 
-      request.once('error', (err: any) => {
-        onEnd(undefined, err.message);
+      req.once('error', (err: unknown) => {
+        onEnd(undefined, (err as Error).message);
       });
     };
 

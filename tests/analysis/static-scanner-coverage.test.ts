@@ -61,7 +61,7 @@ describe('StaticScanner (coverage)', () => {
 
   // ── runEslint — null output path ──────────────────────────────────────────
   it('should return null from runEslint when stdout is not valid JSON array', async () => {
-    const scanner = new StaticScanner(process.cwd());
+    const _scanner = new StaticScanner(process.cwd());
 
     // Use a non-existent dir so eslint fails/returns non-JSON
     const brokenScanner = new StaticScanner('/tmp/__nonexistent_path__');
@@ -76,11 +76,11 @@ describe('StaticScanner (coverage)', () => {
   it('should return null when ESLint output starts with [ but is invalid JSON', async () => {
     const { exec } = await import('node:child_process');
 
-    const scanner = new StaticScanner(process.cwd());
+    const _scanner = new StaticScanner(process.cwd());
 
     // Monkey-patch exec to return stdout starting with '[' but unparseable
-    const originalExec = (exec as any);
-    let execCalled = false;
+    const _originalExec = (exec as any);
+    const _execCalled = false;
 
     // Access the exec import used in static-scanner by monkey-patching via the module cache
     // Since we can't easily patch internal imports, we test via a subclass that overrides runEslint
@@ -90,7 +90,7 @@ describe('StaticScanner (coverage)', () => {
         return new Promise((resolve) => {
           const durationMs = performance.now() - start;
           const stdout = '[INVALID JSON NOT PARSEABLE {{{';
-          if (!stdout || !stdout.trim().startsWith('[')) {
+          if (!stdout.trim().startsWith('[')) {
             resolve(null);
             return;
           }

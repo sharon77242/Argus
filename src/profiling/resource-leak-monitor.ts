@@ -22,8 +22,8 @@ export class ResourceLeakMonitor extends EventEmitter {
 
   constructor(options: ResourceLeakMonitorOptions = {}) {
     super();
-    this.handleThreshold = options.handleThreshold || 1000;
-    this.intervalMs = options.intervalMs || 5000;
+    this.handleThreshold = options.handleThreshold ?? 1000;
+    this.intervalMs = options.intervalMs ?? 5000;
     this.alertCooldownMs = options.alertCooldownMs ?? 60_000;
   }
 

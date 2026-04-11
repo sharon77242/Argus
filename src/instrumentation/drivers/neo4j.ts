@@ -17,13 +17,13 @@ export function patchNeo4j(): boolean {
         const sessionProto = Object.getPrototypeOf(session);
         if (sessionProto.run && !isAlreadyPatched(sessionProto, 'run')) {
           wrapMethod(sessionProto, 'run', 'neo4j-driver');
-          session.close?.().catch?.(() => {});
-          driver.close?.().catch?.(() => {});
+          session.close?.().catch?.(() => { /* cleanup */ });
+          driver.close?.().catch?.(() => { /* cleanup */ });
           return true;
         }
-        session.close?.().catch?.(() => {});
+        session.close?.().catch?.(() => { /* cleanup */ });
       }
-      driver.close?.().catch?.(() => {});
+      driver.close?.().catch?.(() => { /* cleanup */ });
     }
   } catch { /* not installed */ }
   return false;

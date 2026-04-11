@@ -13,7 +13,7 @@ export class MetricsAggregator extends EventEmitter {
   private flushInterval: NodeJS.Timeout | null = null;
   private windowMs: number;
 
-  constructor(windowMs: number = 60000) {
+  constructor(windowMs = 60000) {
     super();
     this.windowMs = windowMs;
   }
@@ -47,7 +47,7 @@ export class MetricsAggregator extends EventEmitter {
     // Group events by their metric type to calculate separate p99s
     const groups = new Map<string, AggregatorEvent[]>();
     for (const event of this.buffer) {
-      const g = groups.get(event.metricName) || [];
+      const g = groups.get(event.metricName) ?? [];
       g.push(event);
       groups.set(event.metricName, g);
     }
@@ -57,7 +57,7 @@ export class MetricsAggregator extends EventEmitter {
 
     const outliersToExport: AggregatorEvent[] = [];
 
-    for (const [metricName, events] of groups.entries()) {
+    for (const [, events] of groups.entries()) {
       // If traffic is very low during this window, just export everything (up to 5 items)
       // to ensure we still have visibility into critical but rare issues
       if (events.length <= 5) {

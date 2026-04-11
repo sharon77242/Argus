@@ -17,7 +17,7 @@
  *   - DIAGNOSTIC_AGENT_ENABLED='false' / '0' env-var kill-switch
  *   - withEntropyThreshold override on logTracingOptions
  */
-import { describe, it, afterEach, mock } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { DiagnosticAgent } from '../src/diagnostic-agent.ts';
@@ -354,7 +354,7 @@ describe('DiagnosticAgent (extended coverage)', () => {
     agent = null; // prevent afterEach double-stop
 
     // All references must be null after stop()
-    const stopped = (agent as any); // agent is null — check via temporary
+    const _stopped = (agent as any); // agent is null — check via temporary
     // Re-read via closure trick: create a new agent, stop it, inspect
     const a = await DiagnosticAgent.create()
       .withHttpTracing()

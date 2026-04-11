@@ -18,11 +18,13 @@ export interface LoggerOptions {
   entropyThreshold?: number;
 }
 
+type ConsoleMethod = (...args: unknown[]) => void;
+
 export class LoggerInstrumentation extends EventEmitter {
   private analyzer = new LogAnalyzer();
   private active = false;
   private getSourceLine: () => string | undefined;
-  private originalLoggers = new Map<string, Function>();
+  private originalLoggers = new Map<string, ConsoleMethod>();
   private options: LoggerOptions;
 
   constructor(getSourceLine: () => string | undefined, options: LoggerOptions = {}) {
@@ -33,42 +35,40 @@ export class LoggerInstrumentation extends EventEmitter {
 
   public enable(): void {
     if (this.active) return;
-    
+
     const methods = ['log', 'info', 'warn', 'error'] as const;
 
     for (const level of methods) {
       if (typeof console[level] === 'function' && !this.originalLoggers.has(level)) {
-        this.originalLoggers.set(level, console[level]);
-        (console as any)[level] = this.createPatch(level, console[level] as Function);
+        this.originalLoggers.set(level, console[level] as ConsoleMethod);
+        (console as unknown as Record<string, unknown>)[level] = this.createPatch(level, console[level] as ConsoleMethod);
       }
     }
 
     this.active = true;
   }
 
-  private createPatch(level: string, original: Function): Function {
-    const self = this;
-    return function (...args: any[]) {
+  private createPatch(level: string, original: ConsoleMethod): ConsoleMethod {
+    return (...args: unknown[]) => {
       const start = performance.now();
-      const sourceLine = self.getSourceLine();
-      
+      const sourceLine = this.getSourceLine();
+
       let scrubbed = false;
 
-      // Entropy scrubbing on string arguments
-      if (self.options.scrubContext) {
+      if (this.options.scrubContext) {
         for (let i = 0; i < args.length; i++) {
           if (typeof args[i] === 'string') {
-            const before = args[i];
-            args[i] = EntropyChecker.scrubHighEntropyStrings(before, self.options.entropyThreshold!);
+            const before = args[i] as string;
+            args[i] = EntropyChecker.scrubHighEntropyStrings(before, this.options.entropyThreshold ?? 4.0);
             if (before !== args[i]) scrubbed = true;
           }
         }
       }
 
-      const suggestions = self.analyzer.analyze(args, level);
-      
+      const suggestions = this.analyzer.analyze(args, level);
+
       try {
-        return original.apply(console, args);
+        original.apply(console, args);
       } finally {
         const durationMs = performance.now() - start;
         const traced: TracedLog = {
@@ -80,7 +80,7 @@ export class LoggerInstrumentation extends EventEmitter {
           timestamp: Date.now(),
           suggestions: suggestions.length > 0 ? suggestions : undefined,
         };
-        self.emit('log', traced);
+        this.emit('log', traced);
       }
     };
   }
@@ -91,7 +91,7 @@ export class LoggerInstrumentation extends EventEmitter {
     for (const level of methods) {
       const original = this.originalLoggers.get(level);
       if (original) {
-        (console as any)[level] = original;
+        (console as unknown as Record<string, unknown>)[level] = original;
       }
     }
     this.originalLoggers.clear();

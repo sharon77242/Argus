@@ -1,7 +1,7 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import diagnostics_channel from 'node:diagnostics_channel';
-import { once } from 'node:events';
+
 import { patchMethod, removeDriverPatches, AUTO_PATCH_CHANNEL } from '../../src/instrumentation/drivers/index.ts';
 
 describe('Driver Auto-Patching', () => {
@@ -13,7 +13,7 @@ describe('Driver Auto-Patching', () => {
   it('should patch a mock prototype and publish query timing to diagnostics_channel', async () => {
     // Simulate a DB driver prototype with a promise-based query method
     const mockProto = {
-      query: async function (sql: string) {
+      query: async function (_sql: string) {
         return { rows: [{ id: 1 }] };
       }
     };
@@ -81,7 +81,7 @@ describe('Driver Auto-Patching', () => {
   });
 
   it('should cleanly remove patches on removeDriverPatches()', async () => {
-    const original = async function (sql: string) { return 'original'; };
+    const original = async function (_sql: string) { return 'original'; };
     const mockProto = { query: original };
 
     patchMethod(mockProto, 'query', 'test');
@@ -93,7 +93,7 @@ describe('Driver Auto-Patching', () => {
 
   it('should handle config-object style arguments', async () => {
     const mockProto = {
-      query: async function (config: { text: string; values: any[] }) {
+      query: async function (_config: { text: string; values: any[] }) {
         return { rows: [] };
       }
     };

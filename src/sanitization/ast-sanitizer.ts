@@ -10,32 +10,27 @@ export class AstSanitizer {
     return this.parser.sqlify(ast);
   }
 
-  private traverse(node: any): void {
+  private traverse(node: unknown): void {
     if (Array.isArray(node)) {
-      for (const item of node) {
+      for (const item of node as unknown[]) {
         this.traverse(item);
       }
       return;
     }
 
-    if (node !== null && typeof node === "object") {
+    if (node !== null && typeof node === 'object') {
+      const n = node as Record<string, unknown>;
       const literalTypes = [
-        "number",
-        "string",
-        "single_quote_string",
-        "double_quote_string",
-        "hex_string",
-        "bit_string",
-        "bool",
-        "null"
+        'number', 'string', 'single_quote_string', 'double_quote_string',
+        'hex_string', 'bit_string', 'bool', 'null'
       ];
 
-      if (typeof node.type === "string" && literalTypes.includes(node.type)) {
-        node.type = "origin";
-        node.value = "?";
+      if (typeof n.type === 'string' && literalTypes.includes(n.type)) {
+        n.type = 'origin';
+        n.value = '?';
       } else {
-        for (const key of Object.keys(node)) {
-          this.traverse(node[key]);
+        for (const key of Object.keys(n)) {
+          this.traverse(n[key]);
         }
       }
     }

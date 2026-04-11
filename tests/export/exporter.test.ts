@@ -2,7 +2,6 @@ import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { OTLPExporter } from '../../src/export/exporter.ts';
 import https from 'node:https';
-import crypto from 'node:crypto';
 import type { AggregatorEvent } from '../../src/export/aggregator.ts';
 import { EventEmitter } from 'node:events';
 

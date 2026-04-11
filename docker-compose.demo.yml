@@ -43,6 +43,7 @@ services:
       #  Set to "false" or "0" for zero-overhead passthrough.
       #  Set to "true" or "1" (or leave unset) to enable.
       DIAGNOSTIC_AGENT_ENABLED: "true"
+      DIAGNOSTIC_DEBUG: "true"
 
 volumes:
   db_data:

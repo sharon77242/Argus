@@ -21,7 +21,7 @@ export function patchClickhouse(): boolean {
           patched = true;
         }
       }
-      tmpClient.close?.().catch?.(() => {});
+      tmpClient.close?.().catch?.(() => { /* cleanup */ });
       return patched;
     }
   } catch { /* not installed */ }

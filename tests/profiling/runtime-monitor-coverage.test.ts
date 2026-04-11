@@ -5,18 +5,18 @@
  *          captureCpuProfile with null inspectorSession (lines 167-172),
  *          handleEventLoopLag isProfiling guard (line 137)
  */
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { RuntimeMonitor } from '../../src/profiling/runtime-monitor.ts';
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const _sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('RuntimeMonitor (coverage)', () => {
-  let monitor: RuntimeMonitor;
+  let monitor: RuntimeMonitor | undefined;
 
   afterEach(() => {
-    monitor?.stop();
+    if (monitor) monitor.stop();
   });
 
   // ── Error from checkThresholds: memory-leak anomaly via direct call ───────
@@ -77,7 +77,7 @@ describe('RuntimeMonitor (coverage)', () => {
     (monitor as any).lastCpuProfileTime = Date.now();
 
     const anomalyPromise = new Promise<any>(resolve => {
-      monitor.on('anomaly', (e) => {
+      monitor!.on('anomaly', (e) => {
         if (e.type === 'event-loop-lag') resolve(e);
       });
     });
@@ -209,10 +209,10 @@ describe('RuntimeMonitor (coverage)', () => {
     (monitor as any).lastCpuProfileTime = 0;
 
     const anomalyPromise = new Promise<any>(resolve => {
-      monitor.on('anomaly', resolve);
+      monitor!.on('anomaly', resolve);
     });
     const errorPromise = new Promise<any>(resolve => {
-      monitor.on('error', resolve);
+      monitor!.on('error', resolve);
     });
 
     (monitor as any).handleEventLoopLag(200);

@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { MetricsAggregator, type AggregatorEvent } from '../../src/export/aggregator.ts';
-import { once } from 'node:events';
+
 
 describe('MetricsAggregator', () => {
   let aggregator: MetricsAggregator;
@@ -20,11 +20,11 @@ describe('MetricsAggregator', () => {
     aggregator.record('query', 500, { data: 'slow' });
 
     aggregator.flush();
-    let flushedCount = 0;
+    let _flushedCount = 0;
     
     // We can test synchronously because flush() emits synchronously in the file
     aggregator.on('flush', (events: AggregatorEvent[]) => {
-      flushedCount = events.length;
+      _flushedCount = events.length;
       assert.strictEqual(events.length, 3);
     });
 

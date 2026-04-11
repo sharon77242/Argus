@@ -17,21 +17,25 @@ export interface PatchedQueryMessage {
   error?: unknown;
 }
 
+
+type AnyTarget = any;
+type AnyFn = (...args: unknown[]) => unknown;
+
 /**
  * Registry of active patches so we can cleanly undo them on teardown.
  */
 export interface PatchRecord {
-  target: any;
+  target: AnyTarget;
   methodName: string;
-  original: Function;
+  original: AnyFn;
 }
 
 export const activePatches: PatchRecord[] = [];
 
 export const PATCHED_SYMBOL = Symbol.for('diagnostic-agent.patched');
 
-export function isAlreadyPatched(target: any, methodName: string): boolean {
-  return target[methodName]?.[PATCHED_SYMBOL] === true;
+export function isAlreadyPatched(target: AnyTarget, methodName: string): boolean {
+  return (target[methodName] as Record<symbol, unknown>)[PATCHED_SYMBOL] === true;
 }
 
 /**
@@ -41,30 +45,28 @@ export function isAlreadyPatched(target: any, methodName: string): boolean {
  *   2. Promise-style:   await client.query(sql, params)
  *   3. Config object:   client.query({ text: sql, values: [...] })
  */
-export function wrapMethod(target: any, methodName: string, driverName: string): void {
-  // Idempotency guard — skip if already patched to prevent duplicate activePatches entries
+export function wrapMethod(target: AnyTarget, methodName: string, driverName: string): void {
   if (isAlreadyPatched(target, methodName)) return;
 
-  const original = target[methodName];
+  const original = target[methodName] as AnyFn;
   const channel = diagnostics_channel.channel(AUTO_PATCH_CHANNEL);
 
-  const wrapped = function (this: any, ...args: any[]) {
+  const wrapped = function (this: unknown, ...args: unknown[]): unknown {
     const start = performance.now();
 
-    // Extract the query string from various argument shapes
     const queryArg = args[0];
+    const queryArgAsObj = queryArg as Record<string, unknown> | null;
     const queryText: string =
       typeof queryArg === 'string'
         ? queryArg
-        : typeof queryArg?.text === 'string'
-          ? queryArg.text
-          : String(queryArg ?? '');
+        : typeof queryArgAsObj?.text === 'string'
+          ? queryArgAsObj.text
+          : queryArg != null ? String(queryArg as string | number) : '';
 
-    // Find and wrap the callback if present
     const lastArg = args[args.length - 1];
     if (typeof lastArg === 'function') {
-      const originalCallback = lastArg;
-      args[args.length - 1] = function (err: any, ...cbArgs: any[]) {
+      const originalCallback = lastArg as AnyFn;
+      args[args.length - 1] = function (this: unknown, err: unknown, ...cbArgs: unknown[]) {
         const durationMs = performance.now() - start;
         channel.publish({
           query: queryText,
@@ -72,17 +74,16 @@ export function wrapMethod(target: any, methodName: string, driverName: string):
           driver: driverName,
           error: err ?? undefined,
         } satisfies PatchedQueryMessage);
-        return originalCallback.call(this, err, ...cbArgs);
+        return originalCallback.call(this, err, ...cbArgs) as unknown;
       };
-      return original.apply(this, args);
+      return original.apply(this, args) as unknown;
     }
 
-    // Promise style
     const result = original.apply(this, args);
 
-    if (result && typeof result.then === 'function') {
-      return result.then(
-        (res: any) => {
+    if (result && typeof result === 'object' && 'then' in result && typeof (result as Record<string, unknown>).then === 'function') {
+      return (result as Promise<unknown>).then(
+        (res) => {
           const durationMs = performance.now() - start;
           channel.publish({
             query: queryText,
@@ -91,7 +92,7 @@ export function wrapMethod(target: any, methodName: string, driverName: string):
           } satisfies PatchedQueryMessage);
           return res;
         },
-        (err: any) => {
+        (err: unknown) => {
           const durationMs = performance.now() - start;
           channel.publish({
             query: queryText,
@@ -104,7 +105,6 @@ export function wrapMethod(target: any, methodName: string, driverName: string):
       );
     }
 
-    // Synchronous fallback
     const durationMs = performance.now() - start;
     channel.publish({
       query: queryText,
@@ -114,7 +114,7 @@ export function wrapMethod(target: any, methodName: string, driverName: string):
     return result;
   };
 
-  (wrapped as any)[PATCHED_SYMBOL] = true;
+  (wrapped as unknown as Record<symbol, unknown>)[PATCHED_SYMBOL] = true;
   target[methodName] = wrapped;
   activePatches.push({ target, methodName, original });
 }
@@ -123,7 +123,7 @@ export function wrapMethod(target: any, methodName: string, driverName: string):
  * Lower-level utility: patch an arbitrary object's method.
  * Useful for users who want to patch a custom driver or library.
  */
-export function patchMethod(target: any, methodName: string, driverName: string): void {
+export function patchMethod(target: AnyTarget, methodName: string, driverName: string): void {
   if (isAlreadyPatched(target, methodName)) return;
   wrapMethod(target, methodName, driverName);
 }

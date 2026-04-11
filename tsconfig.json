@@ -14,7 +14,8 @@
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
     "lib": ["ES2022"],
-    "types": ["node"]
+    "types": ["node"],
+    "strictNullChecks": true
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules", "dist"]

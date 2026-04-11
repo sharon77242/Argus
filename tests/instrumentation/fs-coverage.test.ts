@@ -81,7 +81,7 @@ describe('FsInstrumentation (coverage)', () => {
         } catch {}
 
         // We don't assert on the event content, just that it didn't crash
-        done(err || undefined);
+        done(err ?? undefined);
       });
     } catch (e) {
       instr.disable();

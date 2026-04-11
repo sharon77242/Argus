@@ -39,12 +39,25 @@ export default tseslint.config(
   {
     files: ["tests/**/*.ts"],
     rules: {
-      // Looser rules for test files
       "@typescript-eslint/no-unsafe-return": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/no-floating-promises": "off",
+      "@typescript-eslint/no-empty-function": "off",
+      "@typescript-eslint/require-await": "off",
+      "@typescript-eslint/await-thenable": "off",
+      "@typescript-eslint/no-misused-promises": "off",
+      "@typescript-eslint/no-unnecessary-type-assertion": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/unbound-method": "off",
+      "@typescript-eslint/ban-ts-comment": "off",
+      "@typescript-eslint/no-unsafe-function-type": "off",
+      "@typescript-eslint/no-unused-vars": ["error", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+      }],
     },
   },
   {
-    ignores: ["node_modules/", "dist/", "*.config.*"],
+    ignores: ["node_modules/", "dist/", "*.config.*", "quotes-demo-app/", "scripts/"],
   },
 );

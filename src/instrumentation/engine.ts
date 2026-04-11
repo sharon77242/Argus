@@ -39,12 +39,13 @@ export class InstrumentationEngine extends EventEmitter {
   }
 
   private subscribeToQueryChannel(name: string): void {
-    // Avoid duplicate subscription
     if (this.activeSubscriptions.has(name)) return;
 
-    this.subscribeToChannel(name, (message: any) => {
-      if (message && typeof message.query === "string") {
-        this.emit("query", this.processQueryDetails(message.query, message.durationMs || 0));
+    this.subscribeToChannel(name, (message: unknown) => {
+      const msg = message as Record<string, unknown>;
+      if (typeof msg.query === 'string') {
+        const duration = typeof msg.durationMs === 'number' ? msg.durationMs : 0;
+        this.emit('query', this.processQueryDetails(msg.query, duration));
       }
     });
   }
@@ -110,7 +111,7 @@ export class InstrumentationEngine extends EventEmitter {
   public sanitizeQuery(query: string): string {
     try {
       return this.astSanitizer.stripSql(query);
-    } catch (err) {
+    } catch {
       // Fallback regex if AST parsing fails
       return (
         query
@@ -127,10 +128,11 @@ export class InstrumentationEngine extends EventEmitter {
    * Gathers the exact line in source code calling this library
    */
   public extractSourceLine(): string | undefined {
-    const backup = Error.prepareStackTrace;
-    let stack: any;
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const backup: typeof Error.prepareStackTrace = Error.prepareStackTrace;
+    let stack: unknown;
     try {
-      Error.prepareStackTrace = (_, s) => s;
+      Error.prepareStackTrace = (_err, s) => s;
       const err = new Error();
       Error.captureStackTrace(err);
       stack = err.stack as unknown as NodeJS.CallSite[];
@@ -139,14 +141,13 @@ export class InstrumentationEngine extends EventEmitter {
     }
 
     if (!Array.isArray(stack)) {
-      // Fallback for when we couldn't hook V8 stack trace cleanly
-      const stackStr = new Error().stack || "";
-      const lines = stackStr.split("\n");
+      const stackStr = new Error().stack ?? '';
+      const lines = stackStr.split('\n');
       for (const line of lines) {
         if (
-          line.includes("src") && line.includes("instrumentation") ||
-          line.includes("node:internal") ||
-          !line.trim().startsWith("at")
+          (line.includes('src') && line.includes('instrumentation')) ||
+          line.includes('node:internal') ||
+          !line.trim().startsWith('at')
         ) {
           continue;
         }
@@ -155,13 +156,12 @@ export class InstrumentationEngine extends EventEmitter {
       return undefined;
     }
 
-    for (const frame of stack) {
-      const filename = frame.getFileName() || "";
-      // Exclude node internal, module internal, & V8 internals
+    for (const frame of stack as NodeJS.CallSite[]) {
+      const filename = frame.getFileName() ?? '';
       if (
-        !(filename.includes("src") && filename.includes("instrumentation")) &&
-        !filename.startsWith("node:") &&
-        !filename.includes("node_modules")
+        !(filename.includes('src') && filename.includes('instrumentation')) &&
+        !filename.startsWith('node:') &&
+        !filename.includes('node_modules')
       ) {
         return `${filename}:${frame.getLineNumber()}:${frame.getColumnNumber()}`;
       }

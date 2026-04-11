@@ -3,16 +3,16 @@
  * Targets: custom channels (lines 34-38), traceQuery failure path (87-95),
  *          extractSourceLine fallback (138-152), enable() duplicate subscription guard (line 43)
  */
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import diagnostics_channel from 'node:diagnostics_channel';
 import { InstrumentationEngine } from '../../src/instrumentation/engine.ts';
 
 describe('InstrumentationEngine (coverage)', () => {
-  let engine: InstrumentationEngine;
+  let engine: InstrumentationEngine | undefined;
 
   afterEach(() => {
-    engine?.disable();
+    if (engine) engine.disable();
   });
 
   // ── Custom channels ───────────────────────────────────────────────────────
@@ -22,7 +22,7 @@ describe('InstrumentationEngine (coverage)', () => {
     engine.enable();
 
     const queryPromise = new Promise<any>(resolve => {
-      engine.once('query', resolve);
+      engine!.once('query', resolve);
     });
 
     const ch = diagnostics_channel.channel(customChannel);
@@ -53,7 +53,7 @@ describe('InstrumentationEngine (coverage)', () => {
     engine.on('query', (e) => events.push(e));
 
     await assert.rejects(
-      () => engine.traceQuery('DELETE FROM sessions', async () => {
+      () => engine!.traceQuery('DELETE FROM sessions', async () => {
         throw new Error('DB connection refused');
       }),
       /DB connection refused/,
@@ -96,7 +96,7 @@ describe('InstrumentationEngine (coverage)', () => {
     // In normal Node.js, prepareStackTrace returns an array of CallSite objects
     const line = engine.extractSourceLine();
     // Should return either a string or undefined (both are valid)
-    assert.ok(typeof line === 'string' || line === undefined);
+    assert.ok(typeof line === 'string' || typeof line === 'undefined');
   });
 
   // ── extractSourceLine: non-array fallback via prepareStackTrace override ───
@@ -110,7 +110,7 @@ describe('InstrumentationEngine (coverage)', () => {
     try {
       const line = engine.extractSourceLine();
       // Either returns a string from fallback or undefined; must not throw
-      assert.ok(typeof line === 'string' || line === undefined);
+      assert.ok(typeof line === 'string' || typeof line === 'undefined');
     } finally {
       Error.prepareStackTrace = orig;
     }

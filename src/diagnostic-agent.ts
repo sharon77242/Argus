@@ -8,7 +8,6 @@ import { EntropyChecker } from './sanitization/entropy-checker.ts';
 import { applyDriverPatches, removeDriverPatches } from './instrumentation/drivers/index.ts';
 import { QueryAnalyzer } from './analysis/query-analyzer.ts';
 import { StaticScanner } from './analysis/static-scanner.ts';
-import type { FixSuggestion, ScanResult } from './analysis/types.ts';
 import { HttpInstrumentation, type TracedHttpRequest } from './instrumentation/http.ts';
 import { FsInstrumentation, type TracedFsOperation } from './instrumentation/fs.ts';
 import { LoggerInstrumentation, type LoggerOptions, type TracedLog } from './instrumentation/logger.ts';
@@ -127,11 +126,11 @@ export class DiagnosticAgent extends EventEmitter {
       return agent;
     }
 
-    const env = config.environment || 'prod';
+    const env = config.environment ?? 'prod';
 
     // Resolve app types — 'auto' triggers package.json scanning
     let appTypes: AppType[];
-    const selectedType = config.appType || 'auto';
+    const selectedType = config.appType ?? 'auto';
     if (selectedType === 'auto') {
       const detected = detectAppTypes(config.workspaceDir);
       if (detected.types.length > 0) {
@@ -142,14 +141,14 @@ export class DiagnosticAgent extends EventEmitter {
         appTypes = [];
         if (env !== 'prod') {
           // Delay to after construction so listeners can attach
-          setImmediate(() => agent.emit('info',
+        setImmediate(() => { agent.emit('info',
             'DiagnosticAgent: auto-detection found no recognized app type in package.json. ' +
             'Pass appType explicitly ("web" | "db" | "worker") to enable app-specific monitoring.'
-          ));
+          ); });
         }
       }
     } else {
-      appTypes = Array.isArray(selectedType) ? selectedType : [selectedType as AppType];
+      appTypes = Array.isArray(selectedType) ? selectedType : [selectedType];
     }
 
     // 1. Universal Production Safe Bindings
@@ -169,18 +168,22 @@ export class DiagnosticAgent extends EventEmitter {
     // 3. Application Type Optimization — union modules from all specified types.
     //    Each `with*()` call is idempotent, so duplicates across types are harmless.
     for (const app of appTypes) {
-      if (app === 'web') {
-        agent.withHttpTracing();
-        agent.withResourceLeakMonitor(); // Catch Sockets
-        agent.withInstrumentation({ autoPatching: true }); // Catch remote db calls
-      } else if (app === 'db') {
-        agent.withQueryAnalysis();
-        agent.withInstrumentation({ autoPatching: true });
-        agent.withResourceLeakMonitor(); // Catch Db connection leaks
-      } else if (app === 'worker') {
-        agent.withRuntimeMonitor(); // Catch memory leaks/CPU hangs heavily
-        agent.withResourceLeakMonitor();
-        agent.withInstrumentation({ autoPatching: true });
+      switch (app) {
+        case 'web':
+          agent.withHttpTracing();
+          agent.withResourceLeakMonitor(); // Catch Sockets
+          agent.withInstrumentation({ autoPatching: true }); // Catch remote db calls
+          break;
+        case 'db':
+          agent.withQueryAnalysis();
+          agent.withInstrumentation({ autoPatching: true });
+          agent.withResourceLeakMonitor(); // Catch Db connection leaks
+          break;
+        case 'worker':
+          agent.withRuntimeMonitor(); // Catch memory leaks/CPU hangs heavily
+          agent.withResourceLeakMonitor();
+          agent.withInstrumentation({ autoPatching: true });
+          break;
       }
     }
 
@@ -328,6 +331,10 @@ export class DiagnosticAgent extends EventEmitter {
   public async start(): Promise<this> {
     if (this.globallyDisabled || this.running) return this;
 
+    if (process.env.DIAGNOSTIC_DEBUG === 'true') {
+      this.useConsoleLogger();
+    }
+
     // 1. Source maps
     if (this.sourceMapDir) {
       this.resolver = new SourceMapResolver(this.sourceMapDir);
@@ -340,30 +347,34 @@ export class DiagnosticAgent extends EventEmitter {
     // 3. Exporter
     if (this.exporterConfig) {
       this.exporter = new OTLPExporter(this.exporterConfig);
+      const exporter = this.exporter;
+      const aggregator = this.aggregator;
 
-      this.aggregator.on('flush', async (events: AggregatorEvent[]) => {
-        // Apply entropy scrubbing to every payload before export
-        const scrubbed = events.map(e => ({
-          ...e,
-          payload: typeof e.payload === 'string'
-            ? EntropyChecker.scrubHighEntropyStrings(e.payload, this.entropyThreshold)
-            : e.payload,
-        }));
+      aggregator.on('flush', (events: AggregatorEvent[]) => {
+        void (async () => {
+          const scrubbed = events.map(e => ({
+            ...e,
+            payload: typeof e.payload === 'string'
+              ? EntropyChecker.scrubHighEntropyStrings(e.payload, this.entropyThreshold)
+              : e.payload,
+          }));
 
-        try {
-          await this.exporter!.export(scrubbed);
-        } catch (err) {
-          this.emit('error', err);
-        }
+          try {
+            await exporter.export(scrubbed);
+          } catch (err) {
+            this.emit('error', err);
+          }
+        })();
       });
     }
 
     // 4. Runtime monitor
     if (this.monitorOptions) {
       this.monitor = new RuntimeMonitor(this.monitorOptions);
+      const aggregator = this.aggregator;
 
       this.monitor.on('anomaly', (event: ProfilerEvent) => {
-        this.aggregator!.record(event.type, event.lagMs ?? event.growthBytes ?? 0, event);
+        aggregator.record(event.type, event.lagMs ?? event.growthBytes ?? 0, event);
         this.emit('anomaly', event); // passthrough for user listeners
       });
 
@@ -379,6 +390,7 @@ export class DiagnosticAgent extends EventEmitter {
       }
 
       this.engine = new InstrumentationEngine(this.instrumentationOptions);
+      const aggregator = this.aggregator;
 
       this.engine.on('query', (traced: TracedQuery) => {
         // Enrich with fix suggestions if query analysis is enabled
@@ -386,7 +398,7 @@ export class DiagnosticAgent extends EventEmitter {
           ? { ...traced, suggestions: this.queryAnalyzer.analyze(traced.sanitizedQuery) }
           : traced;
 
-        this.aggregator!.record('query', traced.durationMs, enriched);
+        aggregator.record('query', traced.durationMs, enriched);
         this.emit('query', enriched); // passthrough
       });
 
@@ -414,8 +426,9 @@ export class DiagnosticAgent extends EventEmitter {
     // 8. HTTP Tracing
     if (this.httpTracingEnabled) {
       this.httpTracker = new HttpInstrumentation(() => this.engine?.extractSourceLine());
+      const aggregator = this.aggregator;
       this.httpTracker.on('request', (req: TracedHttpRequest) => {
-        this.aggregator!.record('http', req.durationMs, req);
+        aggregator.record('http', req.durationMs, req);
         this.emit('http', req);
       });
       this.httpTracker.enable();
@@ -424,8 +437,9 @@ export class DiagnosticAgent extends EventEmitter {
     // 9. File System Tracing
     if (this.fsTracingEnabled) {
       this.fsTracker = new FsInstrumentation(() => this.engine?.extractSourceLine());
+      const aggregator = this.aggregator;
       this.fsTracker.on('fs', (op: TracedFsOperation) => {
-        this.aggregator!.record('fs', op.durationMs, op);
+        aggregator.record('fs', op.durationMs, op);
         this.emit('fs', op);
       });
       this.fsTracker.enable();
@@ -434,12 +448,11 @@ export class DiagnosticAgent extends EventEmitter {
     // 10. Logger Tracing
     if (this.logTracingOptions) {
       // Pass the configured entropy override to the logger options if not provided
-      if (this.logTracingOptions.entropyThreshold === undefined) {
-        this.logTracingOptions.entropyThreshold = this.entropyThreshold;
-      }
+      this.logTracingOptions.entropyThreshold ??= this.entropyThreshold;
       this.logTracker = new LoggerInstrumentation(() => this.engine?.extractSourceLine(), this.logTracingOptions);
+      const aggregator = this.aggregator;
       this.logTracker.on('log', (log: TracedLog) => {
-        this.aggregator!.record('log', log.durationMs, log);
+        aggregator.record('log', log.durationMs, log);
         this.emit('log', log);
       });
       this.logTracker.enable();
@@ -513,7 +526,38 @@ export class DiagnosticAgent extends EventEmitter {
     this.running = false;
   }
 
+  // ── built-in console logger ───────────────────────────────────
+
+  /**
+   * Internal only — called automatically when DIAGNOSTIC_DEBUG=true.
+   *
+   * @param prefix  Log prefix (default: `[DiagAgent]`)
+   * @param level   `'warn'` — anomalies/crashes/errors only (default)
+   *                `'verbose'` — also logs every query and HTTP request
+   */
+  private useConsoleLogger(prefix = '[DiagAgent]', level: 'warn' | 'verbose' = 'verbose'): this {
+    this.on('anomaly', (a) => console.warn(`${prefix} ANOMALY type=${a.type}`, a));
+    this.on('leak',    (l) => console.warn(`${prefix} LEAK    handles=${l.handlesCount}`));
+    this.on('crash',   (c) => console.error(`${prefix} CRASH   ${c.error?.message ?? c}`));
+    this.on('error',   (e) => console.error(`${prefix} ERROR   ${e?.message ?? e}`));
+    this.on('info',    (m) => console.info(`${prefix} INFO    ${m}`));
+    this.on('log',     (l) => { if (l.scrubbed) console.warn(`${prefix} SCRUB   console.${l.level} contained secrets — redacted`); });
+
+    if (level === 'verbose') {
+      this.on('query', (q) => {
+        const hints = q.suggestions?.map((s: { message: string }) => s.message).join(' | ');
+        const suffix = hints ? `\n  ⚠ ${hints}` : '';
+        console.log(`${prefix} QUERY   [${q.durationMs.toFixed(1)}ms] ${q.sanitizedQuery}${suffix}`);
+      });
+      this.on('http',  (r) => console.log(`${prefix} HTTP    ${r.method} ${r.url} → ${r.statusCode ?? '---'} (${r.durationMs.toFixed(1)}ms)`));
+    }
+
+    return this;
+  }
+
+
   // ── convenience accessors ─────────────────────────────────────
+
 
   /** Returns `true` if the agent has been started and not yet stopped. */
   public get isRunning(): boolean {

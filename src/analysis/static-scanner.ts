@@ -85,30 +85,30 @@ export class StaticScanner extends EventEmitter {
         (error, stdout) => {
           const durationMs = performance.now() - start;
 
-          if (!stdout || !stdout.trim().startsWith('[')) {
+          if (!stdout.trim().startsWith('[')) {
             // ESLint not installed or no output
             resolve(null);
             return;
           }
 
           try {
-            const results = JSON.parse(stdout) as Array<{
+            const results = JSON.parse(stdout) as {
               filePath: string;
-              messages: Array<{
+              messages: {
                 ruleId: string | null;
                 severity: number;
                 message: string;
                 line: number;
                 column: number;
-              }>;
-            }>;
+              }[];
+            }[];
 
             const suggestions: FixSuggestion[] = [];
             for (const file of results) {
               for (const msg of file.messages) {
                 suggestions.push({
                   severity: msg.severity >= 2 ? 'warning' : 'info',
-                  rule: msg.ruleId || 'eslint-unknown',
+                  rule: msg.ruleId ?? 'eslint-unknown',
                   message: msg.message,
                   location: `${file.filePath}:${msg.line}:${msg.column}`,
                 });
@@ -139,7 +139,7 @@ export class StaticScanner extends EventEmitter {
 
     let match;
     while ((match = regex.exec(output)) !== null) {
-      const [, filePath, line, col, , code, message] = match;
+      const [, filePath, line, col, , code, message] = match as [string, string, string, string, string, string, string];
       suggestions.push({
         severity: tsSeverity(code),
         rule: `TS${code}`,

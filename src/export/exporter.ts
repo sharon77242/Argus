@@ -28,7 +28,7 @@ export class OTLPExporter {
       try {
         url = new URL(this.config.endpointUrl);
       } catch (err) {
-        return reject(err);
+        return reject(err instanceof Error ? err : new Error(String(err)));
       }
 
       const options: https.RequestOptions = {
@@ -43,7 +43,7 @@ export class OTLPExporter {
         ca: this.config.ca,
         cert: this.config.cert,
         key: this.config.key,
-        timeout: this.config.timeoutMs || 5000,
+        timeout: this.config.timeoutMs ?? 5000,
         // Guarantee strict TLS boundary
         rejectUnauthorized: true,
       };
@@ -77,9 +77,8 @@ export class OTLPExporter {
    */
   public formatToOTLP(events: AggregatorEvent[]) {
     const spans = events.map(event => {
-      const timestamp = (event.payload?.timestamp || Date.now());
-      // For event loop lag and DB queries, value is essentially duration (latency)
-      const durationMs = event.metricName === 'memory-leak' ? 0 : (event.value || 0);
+      const timestamp = typeof event.payload?.timestamp === 'number' ? event.payload.timestamp : Date.now();
+      const durationMs = event.metricName === 'memory-leak' ? 0 : event.value;
 
       return {
         traceId: crypto.randomBytes(16).toString('hex'),

@@ -52,11 +52,11 @@ describe('Driver instrumentation (mock-based)', () => {
   describe('pg-style (Promise query)', () => {
     it('should patch Client.prototype.query and publish to channel', async () => {
       const mockPgProto = {
-        query: async (sql: string) => ({ rows: [{ id: 1 }] }),
+        query: async (_sql: string) => ({ rows: [{ id: 1 }] }),
       };
 
       // Simulate what patchPg() does after require('pg') succeeds
-      if (mockPgProto.query && !isAlreadyPatched(mockPgProto, 'query')) {
+      if (!isAlreadyPatched(mockPgProto, 'query')) {
         wrapMethod(mockPgProto, 'query', 'pg');
       }
 
@@ -108,17 +108,17 @@ describe('Driver instrumentation (mock-based)', () => {
   describe('mysql2-style (Connection prototype)', () => {
     it('should patch both query and execute', async () => {
       const mockMysql2Proto = {
-        query: async (sql: string) => [{ id: 1 }],
-        execute: async (sql: string) => [{ id: 2 }],
+        query: async (_sql: string) => [{ id: 1 }],
+        execute: async (_sql: string) => [{ id: 2 }],
       };
 
       // Simulate what patchMysql() does
       let patched = false;
-      if (mockMysql2Proto.query && !isAlreadyPatched(mockMysql2Proto, 'query')) {
+      if (!isAlreadyPatched(mockMysql2Proto, 'query')) {
         wrapMethod(mockMysql2Proto, 'query', 'mysql2');
         patched = true;
       }
-      if (mockMysql2Proto.execute && !isAlreadyPatched(mockMysql2Proto, 'execute')) {
+      if (!isAlreadyPatched(mockMysql2Proto, 'execute')) {
         wrapMethod(mockMysql2Proto, 'execute', 'mysql2');
         patched = true;
       }
@@ -174,7 +174,7 @@ describe('Driver instrumentation (mock-based)', () => {
       wrapMethod(mockMongoProto, 'insertOne', 'mongodb');
 
       const messages = await collectMessages(() => new Promise<void>(resolve => {
-        mockMongoProto.insertOne({ name: 'test' }, (err: any) => {
+        mockMongoProto.insertOne({ name: 'test' }, (_err: any) => {
           // error from DB — expected
           resolve();
         });
@@ -189,7 +189,7 @@ describe('Driver instrumentation (mock-based)', () => {
   describe('redis-style (synchronous)', () => {
     it('should patch synchronous get and publish timing', async () => {
       const mockRedisProto = {
-        get: (key: string) => 'cached-value',
+        get: (_key: string) => 'cached-value',
       };
 
       wrapMethod(mockRedisProto, 'get', 'redis');
@@ -209,7 +209,7 @@ describe('Driver instrumentation (mock-based)', () => {
   describe('object query arg (text property)', () => {
     it('should extract query text from .text property', async () => {
       const mockProto = {
-        query: async (cfg: any) => ({ rows: [] }),
+        query: async (_cfg: any) => ({ rows: [] }),
       };
       wrapMethod(mockProto, 'query', 'pg');
 
@@ -225,7 +225,7 @@ describe('Driver instrumentation (mock-based)', () => {
   describe('patchMethod public utility', () => {
     it('should wrap and track a custom user-defined driver method', async () => {
       const customDriver = {
-        executeQuery: async (sql: string) => ({ affected: 1 }),
+        executeQuery: async (_sql: string) => ({ affected: 1 }),
       };
 
       patchMethod(customDriver, 'executeQuery', 'custom-db');

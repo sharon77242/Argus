@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 export class SourceMapResolver {
-  private mapCache: Map<string, SourceMapConsumer> = new Map();
-  private jsToMapPath: Map<string, string> = new Map();
+  private mapCache = new Map<string, SourceMapConsumer>();
+  private jsToMapPath = new Map<string, string>();
 
   private baseDir: string;
 

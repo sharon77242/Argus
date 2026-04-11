@@ -66,7 +66,7 @@ describe("InstrumentationEngine", () => {
 
     // Verify the source line is from this file
     assert.ok(
-      event.sourceLine && event.sourceLine.includes("engine.test.ts"),
+      event.sourceLine?.includes("engine.test.ts"),
       "Source line should point to the test file explicitly",
     );
   });

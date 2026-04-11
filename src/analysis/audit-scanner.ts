@@ -27,8 +27,8 @@ export class AuditScanner extends EventEmitter {
           }
 
           try {
-            const auditData = JSON.parse(stdout);
-            const vulnerabilities = auditData.vulnerabilities || {};
+            const auditData = JSON.parse(stdout) as Record<string, unknown>;
+            const vulnerabilities = (auditData.vulnerabilities ?? {}) as Record<string, { severity: string }>;
             const suggestions: FixSuggestion[] = [];
 
             for (const pkgName of Object.keys(vulnerabilities)) {

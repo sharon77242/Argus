@@ -9,7 +9,7 @@ import type { FixSuggestion } from './types.ts';
  */
 export class QueryAnalyzer {
   private parser: InstanceType<typeof Parser>;
-  private recentQueries: Map<string, { count: number; firstSeen: number; warned: boolean }> = new Map();
+  private recentQueries = new Map<string, { count: number; firstSeen: number; warned: boolean }>();
   private readonly N_PLUS_ONE_WINDOW_MS = 1000;
   private readonly N_PLUS_ONE_THRESHOLD = 5;
 
@@ -79,7 +79,18 @@ export class QueryAnalyzer {
         suggestedFix: 'Add a WHERE clause to filter results or LIMIT to cap the result set.',
       });
     }
+
+    // Rule: offset-pagination
+    if (stmt.limit && Array.isArray(stmt.limit.value) && stmt.limit.value.length > 1) {
+      suggestions.push({
+        severity: 'info',
+        rule: 'offset-pagination',
+        message: 'OFFSET pagination scans all preceding rows and degrades at scale. Consider keyset (cursor) pagination.',
+        suggestedFix: 'Use WHERE id > :last_id LIMIT N instead of OFFSET.',
+      });
+    }
   }
+
 
   private analyzeUpdate(stmt: any, suggestions: FixSuggestion[]): void {
     // Rule: missing-where-update
@@ -124,6 +135,15 @@ export class QueryAnalyzer {
         severity: 'info',
         rule: 'missing-limit',
         message: 'SELECT without LIMIT may return unbounded rows.',
+      });
+    }
+
+    if (upper.startsWith('SELECT') && upper.includes('OFFSET')) {
+      suggestions.push({
+        severity: 'info',
+        rule: 'offset-pagination',
+        message: 'OFFSET pagination scans all preceding rows and degrades at scale. Consider keyset (cursor) pagination.',
+        suggestedFix: 'Use WHERE id > :last_id LIMIT N instead of OFFSET.',
       });
     }
 

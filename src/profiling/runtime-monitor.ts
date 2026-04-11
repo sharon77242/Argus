@@ -35,11 +35,11 @@ export class RuntimeMonitor extends EventEmitter {
   private intervalTimer: NodeJS.Timeout | null = null;
   private options: RuntimeMonitorOptions;
 
-  private lastCpuProfileTime: number = 0;
-  private lastMemoryUsage: number = 0;
+  private lastCpuProfileTime = 0;
+  private lastMemoryUsage = 0;
 
   private inspectorSession: Session | null = null;
-  private isProfiling: boolean = false;
+  private isProfiling = false;
 
   constructor(options: RuntimeMonitorOptions = {}) {
     super();
@@ -161,19 +161,20 @@ export class RuntimeMonitor extends EventEmitter {
     }
   }
 
-  private captureCpuProfile(): Promise<any> {
-    return new Promise((resolve, reject) => {
+  private captureCpuProfile(): Promise<unknown> {
+    return new Promise((resolve) => {
       if (!this.inspectorSession) return resolve(null);
 
-      this.inspectorSession.post("Profiler.enable", () => {
+      this.inspectorSession.post('Profiler.enable', () => {
         if (!this.inspectorSession) return resolve(null);
-        this.inspectorSession.post("Profiler.start", () => {
+        this.inspectorSession.post('Profiler.start', () => {
           setTimeout(() => {
             if (!this.inspectorSession) return resolve(null);
-            this.inspectorSession.post("Profiler.stop", (err, res) => {
+            this.inspectorSession.post('Profiler.stop', (err, res) => {
               if (!this.inspectorSession) return resolve(null);
-              this.inspectorSession.post("Profiler.disable", () => {
+              this.inspectorSession.post('Profiler.disable', () => {
                 if (err) resolve(null);
+                // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
                 else resolve(res?.profile ?? null);
               });
             });

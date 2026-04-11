@@ -5,7 +5,7 @@ export class LogAnalyzer {
   private readonly ERROR_WINDOW_MS = 1000;
   private readonly ERROR_THRESHOLD = 5;
 
-  public analyze(args: any[], level: string = 'log'): FixSuggestion[] {
+  public analyze(args: any[], level = 'log'): FixSuggestion[] {
     const suggestions: FixSuggestion[] = [];
 
     // 1. Unstructured Logging Warning
@@ -28,7 +28,7 @@ export class LogAnalyzer {
     }
 
     // 2. Very large objects
-    const totalSizeEstimate = JSON.stringify(args)?.length || 0;
+    const totalSizeEstimate = JSON.stringify(args).length;
     if (totalSizeEstimate > 5000) {
       suggestions.push({
         severity: 'warning',

@@ -18,11 +18,13 @@ export interface TracedFsOperation {
   suggestions?: FixSuggestion[];
 }
 
+type FsMethod = (...args: unknown[]) => unknown;
+
 export class FsInstrumentation extends EventEmitter {
   private analyzer = new FsAnalyzer();
   private active = false;
   private getSourceLine: () => string | undefined;
-  private originalMethods = new Map<string, Function>();
+  private originalMethods = new Map<string, FsMethod>();
 
   constructor(getSourceLine: () => string | undefined) {
     super();
@@ -31,7 +33,7 @@ export class FsInstrumentation extends EventEmitter {
 
   public enable(): void {
     if (this.active) return;
-    
+
     try {
       const methodsToPatch = [
         'readFileSync', 'writeFileSync', 'appendFileSync',
@@ -40,8 +42,8 @@ export class FsInstrumentation extends EventEmitter {
 
       for (const method of methodsToPatch) {
         if (typeof fs[method] === 'function' && !this.originalMethods.has(method)) {
-          this.originalMethods.set(method, fs[method] as Function);
-          (fs as any)[method] = this.createPatch(method, fs[method] as Function);
+          this.originalMethods.set(method, fs[method] as FsMethod);
+          (fs as Record<string, unknown>)[method] = this.createPatch(method, fs[method] as FsMethod);
         }
       }
 
@@ -51,27 +53,27 @@ export class FsInstrumentation extends EventEmitter {
     }
   }
 
-  private createPatch(methodName: string, original: Function): Function {
-    const self = this;
-    return function (...args: any[]) {
+  private createPatch(methodName: string, original: FsMethod): FsMethod {
+    return (...args: unknown[]) => {
       const start = performance.now();
-      const filePath = typeof args[0] === 'string' ? args[0] : (args[0]?.toString() || 'unknown');
-      const sourceLine = self.getSourceLine();
+      const firstArg = args[0];
+      const filePath = typeof firstArg === 'string' ? firstArg
+        : firstArg instanceof URL ? firstArg.pathname
+        : 'unknown';
+      const sourceLine = this.getSourceLine();
 
-      // If it's an async callback function
       const lastArg = args[args.length - 1];
       if (typeof lastArg === 'function') {
-        args[args.length - 1] = function (...cbArgs: any[]) {
-          self.record(methodName, filePath, start, sourceLine);
-          return lastArg.apply(this, cbArgs);
+        args[args.length - 1] = (...cbArgs: unknown[]) => {
+          this.record(methodName, filePath, start, sourceLine);
+          return (lastArg as FsMethod)(...cbArgs);
         };
-        return original.apply(this, args);
+        return original(...args);
       } else {
-        // Sync operation
         try {
-          return original.apply(this, args);
+          return original(...args);
         } finally {
-          self.record(methodName, filePath, start, sourceLine);
+          this.record(methodName, filePath, start, sourceLine);
         }
       }
     };
@@ -97,7 +99,7 @@ export class FsInstrumentation extends EventEmitter {
     if (!this.active) return;
     try {
       for (const [method, original] of this.originalMethods.entries()) {
-        (fs as any)[method] = original;
+        (fs as Record<string, unknown>)[method] = original;
       }
       this.originalMethods.clear();
       this.active = false;
