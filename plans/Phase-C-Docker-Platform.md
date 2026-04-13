@@ -358,6 +358,59 @@ Published as `@argus/ui`. Consumers: Team tier customers embedding dashboards in
 
 ---
 
+## C.7b — Self Code Review
+
+Issues found and corrected:
+
+| Issue | Location | Fix |
+|---|---|---|
+| `validateLicense(jwt ?? '')` — passing empty string on missing JWT gives a misleading "Malformed license key" error instead of "MISSING_TOKEN" | `src/ingestor/index.ts` | Check for missing JWT before calling `validateLicense`. Return `401 MISSING_TOKEN` explicitly. |
+| Embedded dashboard built from `packages/saas` with `ARGUS_MODE=self-hosted` env toggle — but Next.js doesn't support env-based route exclusion at build time without custom plugins | `packages/docker/` | Use a separate Next.js app layout file and dynamic imports gated on the env var at server component level. Or: create a minimal `packages/docker/dashboard/` Next.js app that only imports the components it needs rather than toggling from the full saas app. |
+| `docker-compose.yml` exposes ClickHouse with no authentication | `packages/docker/docker-compose.yml` | Add `CLICKHOUSE_PASSWORD` env var and set `CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1`. Generate a random password in the `diagnose` command if none set. |
+| `diagnose` command does `fetch('http://localhost:4318/v1/traces', ...)` to test OTLP — but the ingestor may not have started yet when `diagnose` runs | `src/diagnose.ts` | Run `diagnose` as a separate `CMD ["diagnose"]` entrypoint, not before start. Or: retry the OTLP check with 3 attempts at 1s intervals. |
+| `ARGUS_OTLP_FORWARD_URL` fire-and-forget swallows all errors silently — customer has no visibility if forwarding is broken | `src/ingestor/index.ts` | Emit a warning log (not error) when forward fails. Count failures; if >10 consecutive failures, emit a warning to stderr once per hour. |
+| Phase C builds the Docker image without version pinning — `clickhouse/clickhouse-server:24-alpine` will silently update | `docker-compose.yml` | Pin to a specific digest or minor version: `clickhouse/clickhouse-server:24.3-alpine`. Document the update procedure. |
+
+---
+
+## C.8 — Test Coverage Requirements
+
+| File | What to cover |
+|---|---|
+| `tests/docker/diagnose.test.ts` | Each check: pass case; fail case returns correct error + fix message; warn case continues without blocking start; structured JSON written to stderr on `self_hosted_viable: false` |
+| `tests/docker/license-validation.test.ts` | Valid self-hosted-pro JWT → accepted; online tier JWT (individual/pro/team) → 403 USE_SAAS_ENDPOINT; expired JWT → clear error message with renewal URL |
+| `tests/docker/ingestor.test.ts` | OTLP payload received → written to embedded ClickHouse; `ARGUS_OTLP_FORWARD_URL` set → forward attempted; forward failure → warning logged, ingest not blocked |
+| `tests/docker/ai-proxy.test.ts` | `OPENAI_API_KEY` absent → 503 AI_NOT_CONFIGURED; key present → proxies to OpenAI; response cached |
+| `tests/docker/persistence.test.ts` | Data written before restart → visible after restart (requires volume mount) |
+| `tests/ui/components.test.ts` | `ArgusProvider` renders without crashing; `ArgusAnomalyTimeline` shows loading state; API key missing → error boundary; data fetched from `/api/v1/events` |
+
+### Docker integration test (CI)
+
+```yaml
+# .github/workflows/docker-test.yml
+- name: Build image
+  run: docker build -t argus-test packages/docker
+- name: Run diagnose
+  run: docker run --rm argus-test diagnose
+- name: Start stack
+  run: docker compose -f packages/docker/docker-compose.yml up -d
+- name: Health check
+  run: |
+    sleep 5
+    curl -f http://localhost:3000/api/health
+    curl -f http://localhost:4318/health
+- name: Ingest test event
+  run: |
+    curl -X POST http://localhost:4318/v1/traces \
+      -H "Authorization: Bearer $TEST_LICENSE_JWT" \
+      -H "Content-Type: application/json" \
+      -d '{"events":[{"eventType":"anomaly","serviceName":"test"}]}'
+- name: Verify in ClickHouse
+  run: docker exec argus-clickhouse clickhouse-client --query "SELECT count() FROM argus.telemetry_events"
+```
+
+---
+
 ## C.8 — Supported Configurations (Hard Boundary)
 
 ```

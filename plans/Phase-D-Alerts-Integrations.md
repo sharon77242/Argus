@@ -215,6 +215,33 @@ async function dispatchAlerts(userSub: string, event: TelemetryEvent) {
 
 ---
 
+## D.5b — Self Code Review
+
+Issues found and corrected:
+
+| Issue | Location | Fix |
+|---|---|---|
+| `sendSlackAlert` called with `webhookUrl` stored as plaintext in `alert_configs` — webhook URLs are sensitive credentials | `alert_configs` table | Encrypt `slack_webhook_url` at rest using Supabase's `pgcrypto` extension: `pgp_sym_encrypt(url, app_secret)` on write, `pgp_sym_decrypt` on read. |
+| `deliverWebhook` uses `await sleep(delay)` with hardcoded values — sleep inside a server function holds the Vercel function open | `lib/alerting/webhooks.ts` | Move retry logic to a queue (Upstash QStash or a Supabase background job). Do not sleep inline in a serverless function. Or: emit a retry job to a `webhook_retry_queue` Supabase table and process it via a cron. |
+| `Promise.allSettled` in `dispatchAlerts` — a slow Slack call (5s timeout) holds up all other integrations since they all start in parallel but the function waits for all | `lib/alerting/router.ts` | Each integration call should have `AbortSignal.timeout(5000)`. Already in webhook delivery via signal param — add to Slack and PagerDuty fetch calls too. |
+| `dedup_key` in PagerDuty payload uses `event.id` — but `TelemetryEvent` has no stable `id` field in the current plan | `lib/alerting/pagerduty.ts` | Add `id uuid default gen_random_uuid()` to ClickHouse events OR derive dedup key from `sha256(user_sub + event_type + service_name + floor(received_at / 300))` — deduplicates within 5-minute windows. |
+| Alert dispatch triggered in worker service after ClickHouse write — but Phase D adds Slack/PagerDuty calls that can be slow. Worker's Pub/Sub ack deadline is 60s | `worker/src/index.ts` | Move alert dispatch to a separate async path: after ClickHouse write succeeds, publish a second Pub/Sub message to an `alert-events` topic. Alert delivery is a separate worker. Never block ClickHouse ack on Slack latency. |
+
+---
+
+## D.5c — Test Coverage Requirements
+
+| File | What to cover |
+|---|---|
+| `tests/alerting/router.test.ts` | Event not in `event_types` → no alerts fired; alerts disabled → no alerts; each channel called with correct payload; one channel failing doesn't block others (`allSettled`); all have 5s timeout |
+| `tests/alerting/email.test.ts` | Resend called with correct to/subject/html; alert config with no emails → no send |
+| `tests/alerting/slack.test.ts` | Webhook URL set + enabled → POST to Slack URL; Slack returns 400 → error logged, not thrown; 5s timeout fires if Slack hangs |
+| `tests/alerting/pagerduty.test.ts` | Integration key set → POST to PagerDuty Events API; dedup key is deterministic for same event within 5-min window; different 5-min window → different dedup key |
+| `tests/alerting/webhooks.test.ts` | Success on first attempt; failure + 3 retries with correct backoff delays (1s→4s→16s); all fail → failure logged to DB; HMAC sig verifiable by recipient; replay prevention: same payload + different timestamp → different sig |
+| `tests/alerting/config-ui.test.ts` | Alert config persists across page reload; test alert button fires synthetic event through full dispatch path |
+
+---
+
 ## D.6 — Gate Verification
 
 - [ ] Email alert fires within 30 seconds of a `crash` event arriving in ClickHouse
