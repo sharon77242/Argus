@@ -1,53 +1,23 @@
 {
-  "name": "my-typescript-playground",
-  "version": "1.0.0",
-  "description": "Privacy-first performance profiling & diagnostics agent for Node.js",
-  "main": "dist/cjs/index.cjs",
-  "module": "dist/esm/index.js",
-  "types": "dist/esm/index.d.ts",
-  "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
-      },
-      "require": {
-        "types": "./dist/cjs/index.d.cts",
-        "default": "./dist/cjs/index.cjs"
-      }
-    }
-  },
-  "files": [
-    "dist"
-  ],
-  "type": "module",
+  "name": "argus-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Argus — Privacy-first distributed diagnostics platform",
   "engines": {
-    "node": ">=18.7.0"
+    "node": ">=22.6.0",
+    "pnpm": ">=9"
   },
   "scripts": {
-    "build:esm": "tsc -p tsconfig.build.json",
-    "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/post-build.mjs",
-    "build": "npm run build:esm && npm run build:cjs",
-    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "start": "node --experimental-strip-types src/index.ts",
-    "dev": "node --experimental-strip-types --watch src/index.ts",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "test": "node --test --experimental-strip-types tests/**/*.test.ts tests/*.test.ts",
-    "test:watch": "node --test --experimental-strip-types --watch tests/**/*.test.ts tests/*.test.ts",
-    "test:coverage": "node --test --experimental-test-coverage --experimental-strip-types tests/**/*.test.ts tests/*.test.ts",
-    "validate": "npm run typecheck && npm run lint && npm run format:check && npm run test"
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "test:coverage": "pnpm -r run test:coverage",
+    "lint": "pnpm -r run lint",
+    "lint:fix": "pnpm -r run lint:fix",
+    "format": "pnpm -r run format",
+    "format:check": "pnpm -r run format:check",
+    "typecheck": "pnpm -r run typecheck",
+    "validate": "pnpm -r run validate"
   },
-  "keywords": [
-    "typescript",
-    "template",
-    "playground"
-  ],
-  "author": "",
-  "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.15.29",
     "@types/source-map": "^0.5.7",
@@ -56,9 +26,5 @@
     "prettier": "^3.5.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.36.0"
-  },
-  "dependencies": {
-    "node-sql-parser": "^5.4.0",
-    "source-map": "^0.7.6"
   }
 }

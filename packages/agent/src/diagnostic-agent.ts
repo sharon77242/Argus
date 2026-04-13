@@ -15,6 +15,19 @@ import { CrashGuard, type CrashEvent } from './profiling/crash-guard.ts';
 import { ResourceLeakMonitor, type ResourceLeakMonitorOptions, type ResourceLeakEvent } from './profiling/resource-leak-monitor.ts';
 import { AuditScanner } from './analysis/audit-scanner.ts';
 import { detectAppTypes, type DetectionResult } from './profiling/app-type-detector.ts';
+import { validateLicense, type LicenseClaims } from './licensing/license-validator.ts';
+import { checkClockIntegrity } from './licensing/clock-guard.ts';
+import { writeExpirySignal } from './licensing/expiry-signal.ts';
+import { GracefulShutdown, type GracefulShutdownOptions } from './profiling/graceful-shutdown.ts';
+
+// WeakMap-based private storage for license claims — avoids exposing internal field on agent
+const licenseClaims = new WeakMap<DiagnosticAgent, LicenseClaims>();
+
+export function shouldExport(eventType: string, claims: LicenseClaims | null): boolean {
+  if (!claims) return false; // free mode: local EventEmitter only, no OTLP export
+  return claims.allowedEvents.includes(eventType);
+  // sampleRates is always {} — no sampling side-effects on any tier
+}
 
 export type AppType = 'web' | 'db' | 'worker';
 
@@ -64,6 +77,7 @@ export class DiagnosticAgent extends EventEmitter {
   private crashGuardEnabled = false;
   private leakMonitorOptions: ResourceLeakMonitorOptions | null = null;
   private auditScanDir: string | null = null;
+  private gracefulShutdownOptions: GracefulShutdownOptions | null = null;
 
   // ── live instances (created on .start()) ──
   private resolver: SourceMapResolver | null = null;
@@ -322,6 +336,17 @@ export class DiagnosticAgent extends EventEmitter {
     return this;
   }
 
+  /**
+   * Register SIGTERM/SIGINT handlers that flush telemetry before process exit.
+   * Prevents data loss when the container scheduler terminates the process.
+   * ✅ Prod Safe: Yes
+   * 📊 Resource Impact: Negligible
+   */
+  public withGracefulShutdown(options: GracefulShutdownOptions = {}): this {
+    this.gracefulShutdownOptions = options;
+    return this;
+  }
+
   // ── lifecycle ─────────────────────────────────────────────────
 
   /**
@@ -333,6 +358,28 @@ export class DiagnosticAgent extends EventEmitter {
 
     if (process.env.DIAGNOSTIC_DEBUG === 'true') {
       this.useConsoleLogger();
+    }
+
+    // 0. License validation (always runs first; failures fall back to free mode — never crash)
+    const licenseKey = process.env.DIAGNOSTIC_LICENSE_KEY;
+    if (licenseKey) {
+      try {
+        const claims = validateLicense(licenseKey);
+        if (checkClockIntegrity(claims.tier, Date.now()) === 'rollback') {
+          this.emit('error', new Error('DiagnosticAgent: system clock anomaly detected — running in free mode'));
+        } else {
+          licenseClaims.set(this, claims);
+          this.emit('info', `DiagnosticAgent: tier=${claims.tier}, exp=${new Date(claims.exp * 1000).toISOString()}`);
+        }
+      } catch (err) {
+        if ((err as Error).message === 'EXPIRED') {
+          writeExpirySignal('Renew at: https://argus.dev/billing');
+          this.emit('info', 'DiagnosticAgent: license expired — running in free mode. Renew at: https://argus.dev/billing');
+        } else {
+          this.emit('error', new Error(`DiagnosticAgent: invalid license — ${(err as Error).message}`));
+        }
+        // Always continue in free mode — never crash the host application
+      }
     }
 
     // 1. Source maps
@@ -486,14 +533,20 @@ export class DiagnosticAgent extends EventEmitter {
       });
     }
 
+    // 14. Graceful Shutdown
+    if (this.gracefulShutdownOptions !== null) {
+      new GracefulShutdown().register(this, this.gracefulShutdownOptions);
+    }
+
     this.running = true;
     return this;
   }
 
   /**
    * Gracefully tear down every subsystem.
+   * Returns a Promise so callers (e.g. GracefulShutdown) can await flush completion.
    */
-  public stop(): void {
+  public async stop(): Promise<void> {
     if (this.globallyDisabled || !this.running) return;
 
     if (this.engine) this.engine.disable();

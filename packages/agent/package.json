@@ -1,0 +1,67 @@
+{
+  "name": "deep-diagnostic-agent",
+  "version": "0.2.0",
+  "description": "Privacy-first performance profiling & diagnostics agent for Node.js",
+  "main": "dist/cjs/index.cjs",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.cts",
+        "default": "./dist/cjs/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "src/licensing/public-key.ts"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "build:esm": "tsc -p tsconfig.build.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node ../../scripts/post-build.mjs",
+    "build": "pnpm run build:esm && pnpm run build:cjs",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test --experimental-strip-types tests/**/*.test.ts tests/*.test.ts",
+    "test:watch": "node --test --experimental-strip-types --watch tests/**/*.test.ts tests/*.test.ts",
+    "test:coverage": "node --test --experimental-test-coverage --experimental-strip-types tests/**/*.test.ts tests/*.test.ts",
+    "validate": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm run test"
+  },
+  "keywords": [
+    "node",
+    "diagnostics",
+    "performance",
+    "profiling",
+    "apm",
+    "observability",
+    "privacy"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "@types/source-map": "^0.5.7",
+    "eslint": "^9.31.0",
+    "jiti": "^2.4.2",
+    "prettier": "^3.5.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.36.0"
+  },
+  "dependencies": {
+    "node-sql-parser": "^5.4.0",
+    "source-map": "^0.7.6"
+  }
+}

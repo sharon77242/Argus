@@ -2,6 +2,7 @@ import diagnostics_channel from 'node:diagnostics_channel';
 import { EventEmitter } from 'node:events';
 import { HttpAnalyzer } from '../analysis/http-analyzer.ts';
 import type { FixSuggestion } from '../analysis/types.ts';
+import { getCurrentContext } from './correlation.ts';
 
 export interface TracedHttpRequest {
   method: string;
@@ -12,6 +13,7 @@ export interface TracedHttpRequest {
   sourceLine?: string;
   timestamp: number;
   suggestions?: FixSuggestion[];
+  correlationId?: string;
 }
 
 export class HttpInstrumentation extends EventEmitter {
@@ -43,6 +45,7 @@ export class HttpInstrumentation extends EventEmitter {
       const url = `${protocol}//${host}${path}`;
       const sourceLine = this.getSourceLine();
 
+      const correlationId = getCurrentContext()?.requestId;
       const onEnd = (statusCode?: number, errMessage?: string) => {
         const durationMs = performance.now() - start;
         const suggestions = this.analyzer.analyze(method, url, durationMs);
@@ -56,6 +59,7 @@ export class HttpInstrumentation extends EventEmitter {
           sourceLine,
           timestamp: Date.now(),
           suggestions: suggestions.length > 0 ? suggestions : undefined,
+          correlationId,
         };
 
         this.emit('request', traced);

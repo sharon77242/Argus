@@ -1,12 +1,14 @@
 import diagnostics_channel from "node:diagnostics_channel";
 import { EventEmitter } from "node:events";
 import { AstSanitizer } from "../sanitization/ast-sanitizer.ts";
+import { getCurrentContext } from "./correlation.ts";
 
 export interface TracedQuery {
   sanitizedQuery: string;
   durationMs: number;
   sourceLine?: string;
   timestamp: number;
+  correlationId?: string;
 }
 
 export interface InstrumentationOptions {
@@ -80,6 +82,7 @@ export class InstrumentationEngine extends EventEmitter {
         durationMs,
         sourceLine,
         timestamp: Date.now(),
+        correlationId: getCurrentContext()?.requestId,
       };
 
       this.emit("query", traced);
@@ -91,6 +94,7 @@ export class InstrumentationEngine extends EventEmitter {
         durationMs,
         sourceLine,
         timestamp: Date.now(),
+        correlationId: getCurrentContext()?.requestId,
       } satisfies TracedQuery);
       throw err;
     }
@@ -102,6 +106,7 @@ export class InstrumentationEngine extends EventEmitter {
       durationMs,
       sourceLine: this.extractSourceLine(),
       timestamp: Date.now(),
+      correlationId: getCurrentContext()?.requestId,
     };
   }
 

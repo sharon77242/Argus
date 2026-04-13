@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import diagnostics_channel from "node:diagnostics_channel";
 import { InstrumentationEngine, type TracedQuery } from "../../src/instrumentation/engine.ts";
+import { runWithContext, createRequestContext } from "../../src/instrumentation/correlation.ts";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -69,5 +70,42 @@ describe("InstrumentationEngine", () => {
       event.sourceLine?.includes("engine.test.ts"),
       "Source line should point to the test file explicitly",
     );
+  });
+
+  it("query event includes correlationId when emitted inside runWithContext", async () => {
+    engine.enable();
+
+    const ctx = createRequestContext('GET', '/corr-engine-test');
+
+    const capturedEvent = await runWithContext(ctx, async () => {
+      const p = once(engine, "query");
+      const channel = diagnostics_channel.channel("db.query.execution");
+      channel.publish({ query: "SELECT 1", durationMs: 5 });
+      const [event] = (await Promise.race([
+        p,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 500)),
+      ])) as [TracedQuery];
+      return event;
+    });
+
+    assert.ok(capturedEvent, "Should have captured event");
+    assert.equal(capturedEvent.correlationId, ctx.requestId,
+      "correlationId should match the runWithContext requestId");
+  });
+
+  it("query event correlationId is undefined when emitted outside request context", async () => {
+    engine.enable();
+
+    const p = once(engine, "query");
+    const channel = diagnostics_channel.channel("db.query.execution");
+    channel.publish({ query: "SELECT 2", durationMs: 3 });
+
+    const [event] = (await Promise.race([
+      p,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 500)),
+    ])) as [TracedQuery];
+
+    assert.equal(event.correlationId, undefined,
+      "correlationId should be undefined outside runWithContext");
   });
 });
