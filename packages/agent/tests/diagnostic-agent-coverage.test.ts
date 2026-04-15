@@ -20,6 +20,9 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { createSign, createPrivateKey } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { DiagnosticAgent } from '../src/diagnostic-agent.ts';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -27,6 +30,24 @@ import path from 'node:path';
 import os from 'node:os';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+// ── Dev-k1 license JWT builder ────────────────────────────────────────────────
+const _devPrivKey = createPrivateKey(
+  readFileSync(resolve(import.meta.dirname, 'fixtures/dev-private-key.pem'), 'utf8'),
+);
+function b64u(buf: Buffer) { return buf.toString('base64').replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,''); }
+function makeDevLicense(allowedEvents: string[]): string {
+  const h = b64u(Buffer.from(JSON.stringify({ alg: 'ES256', kid: 'dev-k1', typ: 'JWT' })));
+  const p = b64u(Buffer.from(JSON.stringify({
+    sub: 'a1b2c3d4e5f6a7b8', tier: 'pro',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    iat: Math.floor(Date.now() / 1000) - 60,
+    allowedEvents, sampleRates: {},
+  })));
+  const s = createSign('SHA256');
+  s.update(`${h}.${p}`);
+  return `${h}.${p}.${b64u(s.sign(_devPrivKey))}`;
+}
 
 describe('DiagnosticAgent (extended coverage)', () => {
   let agent: DiagnosticAgent | null = null;
@@ -280,27 +301,34 @@ describe('DiagnosticAgent (extended coverage)', () => {
 
   // ── Exporter wired to aggregator flush ────────────────────────────────────
   it('should emit error when exporter fails during aggregator flush', async () => {
-    agent = await DiagnosticAgent.create()
-      .withExporter({
-        endpointUrl: 'https://127.0.0.1:0/nonexistent',  // will fail to connect
-        ca: 'ca', cert: 'cert', key: 'key',
-      })
-      .withAggregatorWindow(50) // short window to flush quickly
-      .start();
+    // shouldExport() requires a valid license — use dev-k1 with 'test-metric' allowed
+    process.env.DIAGNOSTIC_LICENSE_KEY = makeDevLicense(['test-metric']);
+    try {
+      agent = await DiagnosticAgent.create()
+        .withExporter({
+          endpointUrl: 'https://127.0.0.1:0/nonexistent',  // will fail to connect
+          ca: 'ca', cert: 'cert', key: 'key',
+          maxRetries: 0, // fail immediately, no retry
+        })
+        .withAggregatorWindow(50) // short window to flush quickly
+        .start();
 
-    const errorPromise = once(agent, 'error');
+      const errorPromise = once(agent, 'error');
 
-    // Record something so flush has data
-    const aggregator = (agent as any).aggregator;
-    aggregator.record('test-metric', 42, { test: true });
+      // Record something so flush has data
+      const aggregator = (agent as any).aggregator;
+      aggregator.record('test-metric', 42, { test: true });
 
-    // Force flush
-    aggregator.flush();
+      // Force flush
+      aggregator.flush();
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
-    // Should have an error emitted from the failed export
-    const [err] = await Promise.race([errorPromise, timeout]) as any;
-    assert.ok(err instanceof Error, 'Should emit an Error');
+      const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+      // Should have an error emitted from the failed export
+      const [err] = await Promise.race([errorPromise, timeout]) as any;
+      assert.ok(err instanceof Error, 'Should emit an Error');
+    } finally {
+      delete process.env.DIAGNOSTIC_LICENSE_KEY;
+    }
   });
 
   // ── withInstrumentation + queryAnalysis: engine enriches query ────────────

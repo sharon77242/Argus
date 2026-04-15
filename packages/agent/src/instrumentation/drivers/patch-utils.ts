@@ -1,4 +1,20 @@
 import diagnostics_channel from 'node:diagnostics_channel';
+import { AstSanitizer } from '../../sanitization/ast-sanitizer.ts';
+
+const _sanitizer = new AstSanitizer();
+
+/**
+ * Serializes a NoSQL query argument (object/array) into a sanitized JSON string.
+ * All leaf values are replaced with '?' so no user data reaches the channel.
+ * Used by MongoDB, DynamoDB, Firestore, and Elasticsearch driver patches.
+ */
+export function serializeNoSqlQuery(arg: unknown): string {
+  try {
+    return JSON.stringify(_sanitizer.sanitizeDocument(arg));
+  } catch {
+    return '[nosql-query]';
+  }
+}
 
 /**
  * The standard channel name that auto-patched drivers publish to.
@@ -44,8 +60,17 @@ export function isAlreadyPatched(target: AnyTarget, methodName: string): boolean
  *   1. Callback-style:  client.query(sql, params, callback)
  *   2. Promise-style:   await client.query(sql, params)
  *   3. Config object:   client.query({ text: sql, values: [...] })
+ *
+ * @param serializeQuery  Optional serializer for the first argument.
+ *   Supply `serializeNoSqlQuery` for NoSQL drivers whose queries are objects
+ *   rather than strings. Defaults to SQL-style text extraction.
  */
-export function wrapMethod(target: AnyTarget, methodName: string, driverName: string): void {
+export function wrapMethod(
+  target: AnyTarget,
+  methodName: string,
+  driverName: string,
+  serializeQuery?: (arg: unknown) => string,
+): void {
   if (isAlreadyPatched(target, methodName)) return;
 
   const original = target[methodName] as AnyFn;
@@ -56,8 +81,9 @@ export function wrapMethod(target: AnyTarget, methodName: string, driverName: st
 
     const queryArg = args[0];
     const queryArgAsObj = queryArg as Record<string, unknown> | null;
-    const queryText: string =
-      typeof queryArg === 'string'
+    const queryText: string = serializeQuery
+      ? serializeQuery(queryArg)
+      : typeof queryArg === 'string'
         ? queryArg
         : typeof queryArgAsObj?.text === 'string'
           ? queryArgAsObj.text
@@ -122,8 +148,16 @@ export function wrapMethod(target: AnyTarget, methodName: string, driverName: st
 /**
  * Lower-level utility: patch an arbitrary object's method.
  * Useful for users who want to patch a custom driver or library.
+ *
+ * @param serializeQuery  Optional query serializer. Pass `serializeNoSqlQuery`
+ *   for drivers whose query argument is an object rather than a string.
  */
-export function patchMethod(target: AnyTarget, methodName: string, driverName: string): void {
+export function patchMethod(
+  target: AnyTarget,
+  methodName: string,
+  driverName: string,
+  serializeQuery?: (arg: unknown) => string,
+): void {
   if (isAlreadyPatched(target, methodName)) return;
-  wrapMethod(target, methodName, driverName);
+  wrapMethod(target, methodName, driverName, serializeQuery);
 }

@@ -6,13 +6,13 @@ import { MetricsAggregator, type AggregatorEvent } from './export/aggregator.ts'
 import { OTLPExporter, type ExporterConfig } from './export/exporter.ts';
 import { EntropyChecker } from './sanitization/entropy-checker.ts';
 import { applyDriverPatches, removeDriverPatches } from './instrumentation/drivers/index.ts';
-import { QueryAnalyzer } from './analysis/query-analyzer.ts';
+import { QueryAnalyzer, type QueryAnalyzerOptions } from './analysis/query-analyzer.ts';
 import { StaticScanner } from './analysis/static-scanner.ts';
-import { HttpInstrumentation, type TracedHttpRequest } from './instrumentation/http.ts';
-import { FsInstrumentation, type TracedFsOperation } from './instrumentation/fs.ts';
-import { LoggerInstrumentation, type LoggerOptions, type TracedLog } from './instrumentation/logger.ts';
-import { CrashGuard, type CrashEvent } from './profiling/crash-guard.ts';
-import { ResourceLeakMonitor, type ResourceLeakMonitorOptions, type ResourceLeakEvent } from './profiling/resource-leak-monitor.ts';
+import { HttpInstrumentation } from './instrumentation/http.ts';
+import { FsInstrumentation } from './instrumentation/fs.ts';
+import { LoggerInstrumentation, type LoggerOptions } from './instrumentation/logger.ts';
+import { CrashGuard } from './profiling/crash-guard.ts';
+import { ResourceLeakMonitor, type ResourceLeakMonitorOptions } from './profiling/resource-leak-monitor.ts';
 import { AuditScanner } from './analysis/audit-scanner.ts';
 import { detectAppTypes, type DetectionResult } from './profiling/app-type-detector.ts';
 import { validateLicense, type LicenseClaims } from './licensing/license-validator.ts';
@@ -36,6 +36,8 @@ export interface AgentProfileConfig {
   environment?: 'dev' | 'test' | 'prod';
   appType?: 'auto' | AppType | AppType[];
   workspaceDir?: string;
+  /** Options forwarded to QueryAnalyzer when query analysis is enabled. */
+  queryAnalysis?: QueryAnalyzerOptions;
 }
 
 /**
@@ -69,7 +71,7 @@ export class DiagnosticAgent extends EventEmitter {
   private exporterConfig: ExporterConfig | null = null;
   private aggregatorWindowMs = 60_000;
   private entropyThreshold = 4.0;
-  private queryAnalysisEnabled = false;
+  private queryAnalysisOptions: QueryAnalyzerOptions | null = null;
   private staticScanDir: string | null = null;
   private httpTracingEnabled = false;
   private fsTracingEnabled = false;
@@ -189,7 +191,7 @@ export class DiagnosticAgent extends EventEmitter {
           agent.withInstrumentation({ autoPatching: true }); // Catch remote db calls
           break;
         case 'db':
-          agent.withQueryAnalysis();
+          agent.withQueryAnalysis(config.queryAnalysis ?? {});
           agent.withInstrumentation({ autoPatching: true });
           agent.withResourceLeakMonitor(); // Catch Db connection leaks
           break;
@@ -261,8 +263,8 @@ export class DiagnosticAgent extends EventEmitter {
    * Enable SQL query structure analysis.
    * Automatically attaches fix suggestions to every traced query.
    */
-  public withQueryAnalysis(): this {
-    this.queryAnalysisEnabled = true;
+  public withQueryAnalysis(options: QueryAnalyzerOptions = {}): this {
+    this.queryAnalysisOptions = options;
     return this;
   }
 
@@ -347,6 +349,30 @@ export class DiagnosticAgent extends EventEmitter {
     return this;
   }
 
+  // ── internal wiring helpers ───────────────────────────────────
+
+  /**
+   * Wires a tracker's event to both the aggregator and this agent's own emitter,
+   * then enables it. Handles the repeated enable/record/passthrough pattern for
+   * HTTP, FS, and Log trackers.
+   *
+   * @param tracker    The instrumentation instance (must have `enable()` and emit `trackerEvent`).
+   * @param trackerEvent  The event name the tracker emits internally.
+   * @param agentEvent    The event name re-emitted on this agent (also used as the aggregator key).
+   */
+  private wireTracker(
+    tracker: EventEmitter & { enable(): void },
+    trackerEvent: string,
+    agentEvent: string,
+  ): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tracker.on(trackerEvent, (data: any) => {
+      this.aggregator!.record(agentEvent, data.durationMs as number, data);
+      this.emit(agentEvent, data);
+    });
+    tracker.enable();
+  }
+
   // ── lifecycle ─────────────────────────────────────────────────
 
   /**
@@ -360,186 +386,177 @@ export class DiagnosticAgent extends EventEmitter {
       this.useConsoleLogger();
     }
 
-    // 0. License validation (always runs first; failures fall back to free mode — never crash)
+    this.validateLicenseKey();
+    await this.startInfrastructure();
+    this.wireExporter();
+    this.wireRuntimeMonitor();
+    this.wireInstrumentationEngine();
+    this.aggregator!.enable();
+    this.wireTrackers();
+    this.wireGuards();
+    this.runStartupScans();
+    this.registerGracefulShutdown();
+
+    this.running = true;
+    return this;
+  }
+
+  /** Step 0 — Validate license; fall back to free mode on any failure (never crash). */
+  private validateLicenseKey(): void {
     const licenseKey = process.env.DIAGNOSTIC_LICENSE_KEY;
-    if (licenseKey) {
-      try {
-        const claims = validateLicense(licenseKey);
-        if (checkClockIntegrity(claims.tier, Date.now()) === 'rollback') {
-          this.emit('error', new Error('DiagnosticAgent: system clock anomaly detected — running in free mode'));
-        } else {
-          licenseClaims.set(this, claims);
-          this.emit('info', `DiagnosticAgent: tier=${claims.tier}, exp=${new Date(claims.exp * 1000).toISOString()}`);
-        }
-      } catch (err) {
-        if ((err as Error).message === 'EXPIRED') {
-          writeExpirySignal('Renew at: https://argus.dev/billing');
-          this.emit('info', 'DiagnosticAgent: license expired — running in free mode. Renew at: https://argus.dev/billing');
-        } else {
-          this.emit('error', new Error(`DiagnosticAgent: invalid license — ${(err as Error).message}`));
-        }
-        // Always continue in free mode — never crash the host application
+    if (!licenseKey) return;
+
+    try {
+      const claims = validateLicense(licenseKey);
+      if (checkClockIntegrity(claims.tier, Date.now()) === 'rollback') {
+        this.emit('error', new Error('DiagnosticAgent: system clock anomaly detected — running in free mode'));
+      } else {
+        licenseClaims.set(this, claims);
+        this.emit('info', `DiagnosticAgent: tier=${claims.tier}, exp=${new Date(claims.exp * 1000).toISOString()}`);
+      }
+    } catch (err) {
+      if ((err as Error).message === 'EXPIRED') {
+        writeExpirySignal('Renew at: https://argus.dev/billing');
+        this.emit('info', 'DiagnosticAgent: license expired — running in free mode. Renew at: https://argus.dev/billing');
+      } else {
+        this.emit('error', new Error(`DiagnosticAgent: invalid license — ${(err as Error).message}`));
       }
     }
+  }
 
-    // 1. Source maps
+  /** Steps 1–2 — Source-map resolver and metrics aggregator. */
+  private async startInfrastructure(): Promise<void> {
     if (this.sourceMapDir) {
       this.resolver = new SourceMapResolver(this.sourceMapDir);
       await this.resolver.initialize();
     }
-
-    // 2. Aggregator (always created — acts as central event bus)
     this.aggregator = new MetricsAggregator(this.aggregatorWindowMs);
+  }
 
-    // 3. Exporter
-    if (this.exporterConfig) {
-      this.exporter = new OTLPExporter(this.exporterConfig);
-      const exporter = this.exporter;
-      const aggregator = this.aggregator;
+  /** Step 3 — OTLP exporter wired to the aggregator's flush event. */
+  private wireExporter(): void {
+    if (!this.exporterConfig) return;
 
-      aggregator.on('flush', (events: AggregatorEvent[]) => {
-        void (async () => {
-          const scrubbed = events.map(e => ({
-            ...e,
-            payload: typeof e.payload === 'string'
-              ? EntropyChecker.scrubHighEntropyStrings(e.payload, this.entropyThreshold)
-              : e.payload,
-          }));
+    this.exporter = new OTLPExporter(this.exporterConfig);
+    const exporter = this.exporter;
 
-          try {
-            await exporter.export(scrubbed);
-          } catch (err) {
-            this.emit('error', err);
-          }
-        })();
-      });
+    this.aggregator!.on('flush', (events: AggregatorEvent[]) => {
+      void (async () => {
+        const claims = licenseClaims.get(this) ?? null;
+        const exportable = events.filter(e => shouldExport(e.metricName, claims));
+        if (exportable.length === 0) return;
+
+        const scrubbed = exportable.map(e => ({
+          ...e,
+          payload: typeof e.payload === 'string'
+            ? EntropyChecker.scrubHighEntropyStrings(e.payload, this.entropyThreshold)
+            : e.payload,
+        }));
+
+        try {
+          await exporter.export(scrubbed);
+        } catch (err) {
+          this.emit('error', err);
+        }
+      })();
+    });
+  }
+
+  /** Step 4 — Runtime monitor (event-loop lag + memory anomalies). */
+  private wireRuntimeMonitor(): void {
+    if (!this.monitorOptions) return;
+
+    this.monitor = new RuntimeMonitor(this.monitorOptions);
+    const aggregator = this.aggregator!;
+
+    this.monitor.on('anomaly', (event: ProfilerEvent) => {
+      aggregator.record(event.type, event.lagMs ?? event.growthBytes ?? 0, event);
+      this.emit('anomaly', event);
+    });
+    this.monitor.on('error', (err) => this.emit('error', err));
+    this.monitor.start();
+  }
+
+  /** Steps 5–5b — Instrumentation engine + query analyzer. */
+  private wireInstrumentationEngine(): void {
+    if (this.queryAnalysisOptions !== null) {
+      this.queryAnalyzer = new QueryAnalyzer(this.queryAnalysisOptions);
     }
 
-    // 4. Runtime monitor
-    if (this.monitorOptions) {
-      this.monitor = new RuntimeMonitor(this.monitorOptions);
-      const aggregator = this.aggregator;
+    if (!this.instrumentationOptions) return;
 
-      this.monitor.on('anomaly', (event: ProfilerEvent) => {
-        aggregator.record(event.type, event.lagMs ?? event.growthBytes ?? 0, event);
-        this.emit('anomaly', event); // passthrough for user listeners
-      });
-
-      this.monitor.on('error', (err) => this.emit('error', err));
-      this.monitor.start();
+    if (this.instrumentationOptions.autoPatching) {
+      applyDriverPatches();
     }
 
-    // 5. Instrumentation engine
-    if (this.instrumentationOptions) {
-      // Apply driver auto-patching before enabling the engine
-      if (this.instrumentationOptions.autoPatching) {
-        applyDriverPatches();
-      }
+    this.engine = new InstrumentationEngine(this.instrumentationOptions);
+    const aggregator = this.aggregator!;
 
-      this.engine = new InstrumentationEngine(this.instrumentationOptions);
-      const aggregator = this.aggregator;
+    this.engine.on('query', (traced: TracedQuery) => {
+      const enriched = this.queryAnalyzer
+        ? { ...traced, suggestions: this.queryAnalyzer.analyze(traced.sanitizedQuery) }
+        : traced;
+      aggregator.record('query', traced.durationMs, enriched);
+      this.emit('query', enriched);
+    });
 
-      this.engine.on('query', (traced: TracedQuery) => {
-        // Enrich with fix suggestions if query analysis is enabled
-        const enriched = this.queryAnalyzer
-          ? { ...traced, suggestions: this.queryAnalyzer.analyze(traced.sanitizedQuery) }
-          : traced;
+    this.engine.enable();
+  }
 
-        aggregator.record('query', traced.durationMs, enriched);
-        this.emit('query', enriched); // passthrough
-      });
-
-      this.engine.enable();
-    }
-
-    // 5b. Query analyzer (works even without instrumentation for manual traceQuery)
-    if (this.queryAnalysisEnabled) {
-      this.queryAnalyzer = new QueryAnalyzer();
-    }
-
-    // 6. Start the aggregator flush timer
-    this.aggregator.enable();
-
-    // 7. Static scan (fire-and-forget on startup)
-    if (this.staticScanDir) {
-      const scanner = new StaticScanner(this.staticScanDir);
-      scanner.scan().then((results) => {
-        this.emit('scan', results);
-      }).catch((err) => {
-        this.emit('error', err);
-      });
-    }
-
-    // 8. HTTP Tracing
+  /** Steps 8–10 — HTTP, FS, and log trackers. */
+  private wireTrackers(): void {
     if (this.httpTracingEnabled) {
       this.httpTracker = new HttpInstrumentation(() => this.engine?.extractSourceLine());
-      const aggregator = this.aggregator;
-      this.httpTracker.on('request', (req: TracedHttpRequest) => {
-        aggregator.record('http', req.durationMs, req);
-        this.emit('http', req);
-      });
-      this.httpTracker.enable();
+      this.wireTracker(this.httpTracker, 'request', 'http');
     }
 
-    // 9. File System Tracing
     if (this.fsTracingEnabled) {
       this.fsTracker = new FsInstrumentation(() => this.engine?.extractSourceLine());
-      const aggregator = this.aggregator;
-      this.fsTracker.on('fs', (op: TracedFsOperation) => {
-        aggregator.record('fs', op.durationMs, op);
-        this.emit('fs', op);
-      });
-      this.fsTracker.enable();
+      this.wireTracker(this.fsTracker, 'fs', 'fs');
     }
 
-    // 10. Logger Tracing
     if (this.logTracingOptions) {
-      // Pass the configured entropy override to the logger options if not provided
       this.logTracingOptions.entropyThreshold ??= this.entropyThreshold;
       this.logTracker = new LoggerInstrumentation(() => this.engine?.extractSourceLine(), this.logTracingOptions);
-      const aggregator = this.aggregator;
-      this.logTracker.on('log', (log: TracedLog) => {
-        aggregator.record('log', log.durationMs, log);
-        this.emit('log', log);
-      });
-      this.logTracker.enable();
+      this.wireTracker(this.logTracker, 'log', 'log');
     }
+  }
 
-    // 11. Crash Guard
+  /** Steps 11–12 — Crash guard and resource-leak monitor. */
+  private wireGuards(): void {
     if (this.crashGuardEnabled) {
       this.crashGuard = new CrashGuard((stack) => stack);
-      this.crashGuard.on('crash', (event: CrashEvent) => {
-        this.emit('crash', event);
-      });
+      this.crashGuard.on('crash', (event) => this.emit('crash', event));
       this.crashGuard.enable();
     }
 
-    // 12. Resource Leak Monitor
     if (this.leakMonitorOptions) {
       this.leakMonitor = new ResourceLeakMonitor(this.leakMonitorOptions);
-      this.leakMonitor.on('leak', (event: ResourceLeakEvent) => {
-        this.emit('leak', event);
-      });
+      this.leakMonitor.on('leak', (event) => this.emit('leak', event));
       this.leakMonitor.start();
     }
+  }
 
-    // 13. Audit Scanner
-    if (this.auditScanDir) {
-      const auditScanner = new AuditScanner(this.auditScanDir);
-      auditScanner.scan().then((result) => {
-        if (result) this.emit('audit', result);
-      }).catch((err) => {
-        this.emit('error', err);
-      });
+  /** Steps 7 + 13 — Fire-and-forget static and audit scans. */
+  private runStartupScans(): void {
+    if (this.staticScanDir) {
+      new StaticScanner(this.staticScanDir).scan()
+        .then((results) => this.emit('scan', results))
+        .catch((err) => this.emit('error', err));
     }
 
-    // 14. Graceful Shutdown
+    if (this.auditScanDir) {
+      new AuditScanner(this.auditScanDir).scan()
+        .then((result) => { if (result) this.emit('audit', result); })
+        .catch((err) => this.emit('error', err));
+    }
+  }
+
+  /** Step 14 — Register SIGTERM/SIGINT graceful-shutdown handlers. */
+  private registerGracefulShutdown(): void {
     if (this.gracefulShutdownOptions !== null) {
       new GracefulShutdown().register(this, this.gracefulShutdownOptions);
     }
-
-    this.running = true;
-    return this;
   }
 
   /**

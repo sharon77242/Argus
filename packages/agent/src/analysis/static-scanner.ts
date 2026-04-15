@@ -1,5 +1,6 @@
 import { exec } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { dirname } from 'node:path';
 import type { FixSuggestion, ScanResult } from './types.ts';
 
 /**
@@ -47,26 +48,87 @@ export class StaticScanner extends EventEmitter {
   }
 
   /**
-   * Run `tsc --noEmit` and parse diagnostics into FixSuggestions.
+   * Run TypeScript diagnostics using the Compiler API (structured, no string
+   * parsing). Falls back to spawning `tsc --noEmit` if `typescript` is not
+   * importable in this environment.
    */
   public async runTypeScript(): Promise<ScanResult> {
     const start = performance.now();
 
+    try {
+      // Dynamic import so typescript stays a devDependency — it will be
+      // available in dev/CI environments where withStaticScanner() is used.
+      const tsModule = await import('typescript');
+      const ts = (tsModule.default ?? tsModule) as typeof import('typescript');
+      return this.runTypeScriptAPI(ts, start);
+    } catch {
+      // typescript not resolvable — fall back to spawning tsc
+      return this.runTypeScriptExec(start);
+    }
+  }
+
+  private async runTypeScriptAPI(
+    ts: typeof import('typescript'),
+    start: number,
+  ): Promise<ScanResult> {
+    const configPath = ts.findConfigFile(this.targetDir, ts.sys.fileExists, 'tsconfig.json');
+    if (!configPath) {
+      return { tool: 'tsc', totalIssues: 0, suggestions: [], durationMs: performance.now() - start };
+    }
+
+    const { config, error: readError } = ts.readConfigFile(configPath, ts.sys.readFile);
+    if (readError) {
+      const msg = ts.flattenDiagnosticMessageText(readError.messageText, '\n');
+      return {
+        tool: 'tsc',
+        totalIssues: 1,
+        suggestions: [{ severity: 'warning', rule: 'tsconfig-read-error', message: msg }],
+        durationMs: performance.now() - start,
+      };
+    }
+
+    const parsed = ts.parseJsonConfigFileContent(
+      config as object,
+      ts.sys,
+      dirname(configPath),
+    );
+
+    const program = ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true });
+    const diagnostics = [
+      ...program.getSyntacticDiagnostics(),
+      ...program.getSemanticDiagnostics(),
+    ];
+
+    const suggestions: FixSuggestion[] = diagnostics
+      .filter(d => d.file !== undefined && d.start !== undefined)
+      .map(d => {
+        const { line, character } = d.file!.getLineAndCharacterOfPosition(d.start!);
+        return {
+          severity: tsSeverity(String(d.code)),
+          rule: `TS${d.code}`,
+          message: ts.flattenDiagnosticMessageText(d.messageText, ' '),
+          location: `${d.file!.fileName}:${line + 1}:${character + 1}`,
+        };
+      });
+
+    return {
+      tool: 'tsc',
+      totalIssues: suggestions.length,
+      suggestions,
+      durationMs: performance.now() - start,
+    };
+  }
+
+  private async runTypeScriptExec(start: number): Promise<ScanResult> {
     return new Promise((resolve) => {
       exec(
         'npx tsc --noEmit --pretty false',
-        { cwd: this.targetDir, timeout: 30_000 },
-        (error, stdout, stderr) => {
+        { cwd: this.targetDir, timeout: 30_000, maxBuffer: 5 * 1024 * 1024 },
+        (_error, stdout, stderr) => {
           const durationMs = performance.now() - start;
           const output = (stdout || '') + (stderr || '');
           const suggestions = this.parseTypeScriptOutput(output);
-
-          resolve({
-            tool: 'tsc',
-            totalIssues: suggestions.length,
-            suggestions,
-            durationMs,
-          });
+          resolve({ tool: 'tsc', totalIssues: suggestions.length, suggestions, durationMs });
         },
       );
     });

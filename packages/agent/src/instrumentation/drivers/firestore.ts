@@ -1,5 +1,5 @@
 import { nodeRequire } from './_require.ts';
-import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
+import { isAlreadyPatched, wrapMethod, serializeNoSqlQuery } from './patch-utils.ts';
 
 /**
  * Google Cloud Firestore patches:
@@ -17,7 +17,7 @@ export function patchFirestore(): boolean {
     if (fsProto) {
       for (const method of ['getAll', 'runTransaction'] as const) {
         if (fsProto[method] && !isAlreadyPatched(fsProto, method)) {
-          wrapMethod(fsProto, method, '@google-cloud/firestore');
+          wrapMethod(fsProto, method, '@google-cloud/firestore', serializeNoSqlQuery);
           patched = true;
         }
       }
@@ -28,7 +28,7 @@ export function patchFirestore(): boolean {
     if (collProto) {
       for (const method of ['add', 'get'] as const) {
         if (collProto[method] && !isAlreadyPatched(collProto, method)) {
-          wrapMethod(collProto, method, '@google-cloud/firestore');
+          wrapMethod(collProto, method, '@google-cloud/firestore', serializeNoSqlQuery);
           patched = true;
         }
       }
@@ -39,7 +39,7 @@ export function patchFirestore(): boolean {
     if (docProto) {
       for (const method of ['get', 'set', 'update', 'delete', 'create'] as const) {
         if (docProto[method] && !isAlreadyPatched(docProto, method)) {
-          wrapMethod(docProto, method, '@google-cloud/firestore');
+          wrapMethod(docProto, method, '@google-cloud/firestore', serializeNoSqlQuery);
           patched = true;
         }
       }

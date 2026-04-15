@@ -1,5 +1,5 @@
 import { nodeRequire } from './_require.ts';
-import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
+import { isAlreadyPatched, wrapMethod, serializeNoSqlQuery } from './patch-utils.ts';
 
 /**
  * AWS SDK v3 uses a command-based `.send()` pattern.
@@ -11,7 +11,7 @@ export function patchDynamodb(): boolean {
     const dynamodb = nodeRequire('@aws-sdk/client-dynamodb');
     const proto = dynamodb.DynamoDBClient?.prototype;
     if (proto?.send && !isAlreadyPatched(proto, 'send')) {
-      wrapMethod(proto, 'send', '@aws-sdk/client-dynamodb');
+      wrapMethod(proto, 'send', '@aws-sdk/client-dynamodb', serializeNoSqlQuery);
       return true;
     }
   } catch { /* not installed */ }
@@ -21,7 +21,7 @@ export function patchDynamodb(): boolean {
     const docClient = nodeRequire('@aws-sdk/lib-dynamodb');
     const proto = docClient.DynamoDBDocumentClient?.prototype;
     if (proto?.send && !isAlreadyPatched(proto, 'send')) {
-      wrapMethod(proto, 'send', '@aws-sdk/lib-dynamodb');
+      wrapMethod(proto, 'send', '@aws-sdk/lib-dynamodb', serializeNoSqlQuery);
       return true;
     }
   } catch { /* not installed */ }

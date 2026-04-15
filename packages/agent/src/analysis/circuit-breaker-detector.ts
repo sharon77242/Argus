@@ -1,3 +1,6 @@
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+
 export interface CircuitBreakerSuggestion {
   destination: string;
   driver?: string;
@@ -41,6 +44,11 @@ const DEFAULT_WINDOW_MS = 60_000;
 const DEFAULT_MIN_CALLS = 10;
 const DEFAULT_ERROR_RATE = 0.5;
 
+interface PersistedState {
+  buckets: Record<string, DestinationBucket>;
+  savedAt: number;
+}
+
 function isHttpLike(e: CircuitBreakerEvent): e is HttpLike {
   return 'statusCode' in e || 'url' in e;
 }
@@ -67,26 +75,50 @@ function getDestination(e: CircuitBreakerEvent): string {
 /**
  * Analyses a sliding window of query/HTTP events and surfaces destinations
  * where the error rate exceeds a threshold — suggesting a circuit-breaker pattern.
+ *
+ * Set `persistTo` to a file path to survive process restarts: bucket state is
+ * saved after every `analyze()` call and loaded on construction, so an incident
+ * spanning a restart is not lost.
  */
 export class CircuitBreakerDetector {
   private readonly windowMs: number;
   private readonly minCalls: number;
   private readonly errorRateThreshold: number;
+  private readonly persistTo: string | null;
+  private priorBuckets: Map<string, DestinationBucket>;
 
-  constructor(opts: { windowMs?: number; minCalls?: number; errorRateThreshold?: number } = {}) {
+  constructor(opts: {
+    windowMs?: number;
+    minCalls?: number;
+    errorRateThreshold?: number;
+    /** File path to persist bucket state across restarts. Directory is created if needed. */
+    persistTo?: string;
+  } = {}) {
     this.windowMs = opts.windowMs ?? DEFAULT_WINDOW_MS;
     this.minCalls = opts.minCalls ?? DEFAULT_MIN_CALLS;
     this.errorRateThreshold = opts.errorRateThreshold ?? DEFAULT_ERROR_RATE;
+    this.persistTo = opts.persistTo ?? null;
+    this.priorBuckets = this.loadState();
   }
 
   /**
    * Analyses events and returns circuit-breaker suggestions for any destination
    * whose error rate exceeds the configured threshold.
+   *
+   * If `persistTo` was set, prior bucket state from the last run is merged in
+   * so incidents spanning a process restart are detected correctly.
    */
   analyze(events: CircuitBreakerEvent[]): CircuitBreakerSuggestion[] {
     const now = Date.now();
     const cutoff = now - this.windowMs;
     const buckets = new Map<string, DestinationBucket>();
+
+    // Seed with prior persisted buckets (filtered to those still within window)
+    for (const [dest, prior] of this.priorBuckets) {
+      if (prior.lastSeen >= cutoff) {
+        buckets.set(dest, { ...prior });
+      }
+    }
 
     for (const event of events) {
       const ts = event.timestamp ?? now;
@@ -107,6 +139,9 @@ export class CircuitBreakerDetector {
         bucket.success++;
       }
     }
+
+    // Persist current state for the next run
+    this.saveState(buckets, now);
 
     const suggestions: CircuitBreakerSuggestion[] = [];
 
@@ -135,5 +170,41 @@ export class CircuitBreakerDetector {
     }
 
     return suggestions;
+  }
+
+  /** Remove all persisted state (useful in tests). */
+  clearPersistedState(): void {
+    this.priorBuckets = new Map();
+    if (this.persistTo) {
+      try { writeFileSync(this.persistTo, JSON.stringify({ buckets: {}, savedAt: Date.now() })); } catch { /* ignore */ }
+    }
+  }
+
+  private loadState(): Map<string, DestinationBucket> {
+    if (!this.persistTo) return new Map();
+    try {
+      const raw = readFileSync(this.persistTo, 'utf8');
+      const state = JSON.parse(raw) as PersistedState;
+      const cutoff = Date.now() - this.windowMs * 2; // discard entries older than 2× window
+      const map = new Map<string, DestinationBucket>();
+      for (const [dest, bucket] of Object.entries(state.buckets)) {
+        if (bucket.lastSeen >= cutoff) map.set(dest, bucket);
+      }
+      return map;
+    } catch {
+      return new Map(); // file missing or corrupt — start fresh
+    }
+  }
+
+  private saveState(buckets: Map<string, DestinationBucket>, now: number): void {
+    if (!this.persistTo) return;
+    try {
+      mkdirSync(dirname(this.persistTo), { recursive: true });
+      const state: PersistedState = {
+        buckets: Object.fromEntries(buckets),
+        savedAt: now,
+      };
+      writeFileSync(this.persistTo, JSON.stringify(state), 'utf8');
+    } catch { /* never crash the host app over persistence */ }
   }
 }

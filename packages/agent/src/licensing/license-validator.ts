@@ -91,9 +91,9 @@ export function validateLicense(jwt: string): LicenseClaims {
     throw new Error('EXPIRED');
   }
 
-  // 6. Validate sub is opaque (must not be a raw email/uuid — should be a short hex hash)
-  if (!claims.sub || claims.sub.length < 8) {
-    throw new Error('Invalid JWT: sub claim is missing or too short');
+  // 6. Validate sub is a 16-char lowercase hex string (first 16 chars of SHA-256 user hash)
+  if (!claims.sub || !/^[0-9a-f]{16}$/.test(claims.sub)) {
+    throw new Error('Invalid JWT: sub claim must be a 16-character lowercase hex string');
   }
 
   return claims;

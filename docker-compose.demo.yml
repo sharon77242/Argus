@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
+      POSTGRES_DB: quotesdb
     ports:
       - '5432:5432'
     volumes:
@@ -37,13 +37,27 @@ services:
       DB_PORT: 5432
       DB_USER: postgres
       DB_PASSWORD: postgres
-      DB_NAME: postgres
-
-      # ─── DiagnosticAgent kill-switch ────────────────────────────────────────
-      #  Set to "false" or "0" for zero-overhead passthrough.
-      #  Set to "true" or "1" (or leave unset) to enable.
+      DB_NAME: quotesdb
       DIAGNOSTIC_AGENT_ENABLED: "true"
-      DIAGNOSTIC_DEBUG: "true"
+      DIAGNOSTIC_DEBUG: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ > /dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ── Traffic generator — runs once, then exits ────────────────────────────────
+  simulate:
+    image: quotes-api-with-agent   # reuse the already-built image
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      TARGET_HOST: api
+      TARGET_PORT: "3000"
+    command: ["node", "/app/quotes-demo-app/traffic.js"]
+    restart: "no"
 
 volumes:
   db_data:

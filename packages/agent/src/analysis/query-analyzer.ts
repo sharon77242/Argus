@@ -2,6 +2,13 @@ import pkg from 'node-sql-parser';
 const { Parser } = pkg;
 import type { FixSuggestion } from './types.ts';
 
+export interface QueryAnalyzerOptions {
+  /** Time window for N+1 detection in ms (default: 1000). */
+  nPlusOneWindowMs?: number;
+  /** Number of identical queries within the window before N+1 fires (default: 5). */
+  nPlusOneThreshold?: number;
+}
+
 /**
  * Analyzes sanitized SQL query *structure* (not values) and returns
  * actionable fix suggestions. Uses AST parsing via node-sql-parser
@@ -10,11 +17,13 @@ import type { FixSuggestion } from './types.ts';
 export class QueryAnalyzer {
   private parser: InstanceType<typeof Parser>;
   private recentQueries = new Map<string, { count: number; firstSeen: number; warned: boolean }>();
-  private readonly N_PLUS_ONE_WINDOW_MS = 1000;
-  private readonly N_PLUS_ONE_THRESHOLD = 5;
+  private readonly N_PLUS_ONE_WINDOW_MS: number;
+  private readonly N_PLUS_ONE_THRESHOLD: number;
 
-  constructor() {
+  constructor(options: QueryAnalyzerOptions = {}) {
     this.parser = new Parser();
+    this.N_PLUS_ONE_WINDOW_MS = options.nPlusOneWindowMs ?? 1000;
+    this.N_PLUS_ONE_THRESHOLD = options.nPlusOneThreshold ?? 5;
   }
 
   /**

@@ -37,8 +37,8 @@
     "format:check": "prettier --check .",
     "test": "node --test --experimental-strip-types tests/**/*.test.ts tests/*.test.ts",
     "test:watch": "node --test --experimental-strip-types --watch tests/**/*.test.ts tests/*.test.ts",
-    "test:coverage": "node --test --experimental-test-coverage --experimental-strip-types tests/**/*.test.ts tests/*.test.ts",
-    "validate": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm run test"
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=80 --test-coverage-functions=80 --test-coverage-branches=70 --experimental-strip-types tests/**/*.test.ts tests/*.test.ts",
+    "validate": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm run test:coverage"
   },
   "keywords": [
     "node",

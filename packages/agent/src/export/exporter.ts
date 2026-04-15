@@ -8,6 +8,17 @@ export interface ExporterConfig {
   cert: string | Buffer;
   key: string | Buffer;
   timeoutMs?: number;
+  /** Max retry attempts on transient 5xx or network errors. Default: 1. */
+  maxRetries?: number;
+  /** Base delay between retries in ms (doubles each attempt). Default: 1000. */
+  retryDelayMs?: number;
+}
+
+/** Retryable: network errors and 5xx responses. Not retryable: 4xx and bad URLs. */
+function isRetryable(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.message.startsWith('OTLP Export failed with status 4')) return false;
+  return true;
 }
 
 export class OTLPExporter {
@@ -19,7 +30,27 @@ export class OTLPExporter {
 
   public async export(events: AggregatorEvent[]): Promise<void> {
     if (events.length === 0) return;
+    const maxRetries = this.config.maxRetries ?? 1;
+    const retryDelayMs = this.config.retryDelayMs ?? 1000;
+    let lastErr: unknown;
 
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        await new Promise(r => setTimeout(r, retryDelayMs * attempt));
+      }
+      try {
+        await this.attempt(events);
+        return; // success
+      } catch (err) {
+        lastErr = err;
+        if (!isRetryable(err)) break; // don't retry 4xx or malformed URL
+      }
+    }
+
+    throw lastErr;
+  }
+
+  private async attempt(events: AggregatorEvent[]): Promise<void> {
     const payload = this.formatToOTLP(events);
     const payloadStr = JSON.stringify(payload);
 

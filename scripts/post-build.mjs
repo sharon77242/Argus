@@ -15,7 +15,8 @@
 import { readdirSync, renameSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { join, extname, basename } from 'node:path';
 
-const CJS_DIR = new URL('../dist/cjs', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
+// Use process.cwd() — this script is run from the package directory (e.g. packages/agent)
+const CJS_DIR = join(process.cwd(), 'dist', 'cjs');
 
 function walk(dir) {
   for (const entry of readdirSync(dir)) {

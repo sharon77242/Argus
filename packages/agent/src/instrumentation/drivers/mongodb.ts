@@ -1,5 +1,5 @@
 import { nodeRequire } from './_require.ts';
-import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
+import { isAlreadyPatched, wrapMethod, serializeNoSqlQuery } from './patch-utils.ts';
 
 const MONGODB_METHODS = [
   'find', 'findOne',
@@ -18,7 +18,7 @@ export function patchMongodb(): boolean {
     let patched = false;
     for (const method of MONGODB_METHODS) {
       if (collProto[method] && !isAlreadyPatched(collProto, method)) {
-        wrapMethod(collProto, method, 'mongodb');
+        wrapMethod(collProto, method, 'mongodb', serializeNoSqlQuery);
         patched = true;
       }
     }
