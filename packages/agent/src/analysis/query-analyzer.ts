@@ -2,6 +2,18 @@ import pkg from 'node-sql-parser';
 const { Parser } = pkg;
 import type { FixSuggestion } from './types.ts';
 
+// Minimal AST shapes we actually inspect — node-sql-parser ships no exported types.
+interface SelectStmt {
+  type: 'select';
+  columns: '*' | Array<{ expr?: { column?: string } }>;
+  where?: unknown;
+  limit?: { value: unknown[] };
+  groupby?: unknown;
+}
+interface UpdateStmt { type: 'update'; where?: unknown; }
+interface DeleteStmt { type: 'delete'; where?: unknown; }
+type ParsedStmt = SelectStmt | UpdateStmt | DeleteStmt | { type: string };
+
 export interface QueryAnalyzerOptions {
   /** Time window for N+1 detection in ms (default: 1000). */
   nPlusOneWindowMs?: number;
@@ -35,15 +47,15 @@ export class QueryAnalyzer {
     // Try AST-based analysis first
     try {
       const ast = this.parser.astify(sanitizedQuery);
-      const stmts = Array.isArray(ast) ? ast : [ast];
+      const stmts = (Array.isArray(ast) ? ast : [ast]) as ParsedStmt[];
 
       for (const stmt of stmts) {
         if (stmt.type === 'select') {
-          this.analyzeSelect(stmt, suggestions);
+          this.analyzeSelect(stmt as SelectStmt, suggestions);
         } else if (stmt.type === 'update') {
-          this.analyzeUpdate(stmt, suggestions);
+          this.analyzeUpdate(stmt as UpdateStmt, suggestions);
         } else if (stmt.type === 'delete') {
-          this.analyzeDelete(stmt, suggestions);
+          this.analyzeDelete(stmt as DeleteStmt, suggestions);
         }
       }
     } catch {
@@ -57,10 +69,10 @@ export class QueryAnalyzer {
     return suggestions;
   }
 
-  private analyzeSelect(stmt: any, suggestions: FixSuggestion[]): void {
+  private analyzeSelect(stmt: SelectStmt, suggestions: FixSuggestion[]): void {
     // Rule: no-select-star
     const columns = stmt.columns;
-    if (columns === '*' || (Array.isArray(columns) && columns.some((c: any) => c.expr?.column === '*'))) {
+    if (columns === '*' || (Array.isArray(columns) && columns.some((c) => c.expr?.column === '*'))) {
       suggestions.push({
         severity: 'warning',
         rule: 'no-select-star',
@@ -101,7 +113,7 @@ export class QueryAnalyzer {
   }
 
 
-  private analyzeUpdate(stmt: any, suggestions: FixSuggestion[]): void {
+  private analyzeUpdate(stmt: UpdateStmt, suggestions: FixSuggestion[]): void {
     // Rule: missing-where-update
     if (!stmt.where) {
       suggestions.push({
@@ -113,7 +125,7 @@ export class QueryAnalyzer {
     }
   }
 
-  private analyzeDelete(stmt: any, suggestions: FixSuggestion[]): void {
+  private analyzeDelete(stmt: DeleteStmt, suggestions: FixSuggestion[]): void {
     // Rule: missing-where-delete
     if (!stmt.where) {
       suggestions.push({

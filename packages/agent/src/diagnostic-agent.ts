@@ -95,6 +95,8 @@ export class DiagnosticAgent extends EventEmitter {
   private leakMonitor: ResourceLeakMonitor | null = null;
 
   private running = false;
+  // Listeners added by useConsoleLogger — kept so they can be removed on stop().
+  private debugListeners: Array<[string, (...args: unknown[]) => void]> = [];
 
   // Private constructor — use DiagnosticAgent.create()
   private constructor() {
@@ -202,6 +204,9 @@ export class DiagnosticAgent extends EventEmitter {
           break;
       }
     }
+
+    // Always register graceful shutdown so buffered telemetry is flushed on SIGTERM/SIGINT.
+    agent.withGracefulShutdown();
 
     return agent;
   }
@@ -365,8 +370,7 @@ export class DiagnosticAgent extends EventEmitter {
     trackerEvent: string,
     agentEvent: string,
   ): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tracker.on(trackerEvent, (data: any) => {
+    tracker.on(trackerEvent, (data: Record<string, unknown>) => {
       this.aggregator!.record(agentEvent, data.durationMs as number, data);
       this.emit(agentEvent, data);
     });
@@ -446,11 +450,12 @@ export class DiagnosticAgent extends EventEmitter {
         const exportable = events.filter(e => shouldExport(e.metricName, claims));
         if (exportable.length === 0) return;
 
+        const threshold = this.entropyThreshold;
         const scrubbed = exportable.map(e => ({
           ...e,
-          payload: typeof e.payload === 'string'
-            ? EntropyChecker.scrubHighEntropyStrings(e.payload, this.entropyThreshold)
-            : e.payload,
+          payload: JSON.parse(
+            EntropyChecker.scrubHighEntropyStrings(JSON.stringify(e.payload), threshold)
+          ) as Record<string, unknown>,
         }));
 
         try {
@@ -470,7 +475,7 @@ export class DiagnosticAgent extends EventEmitter {
     const aggregator = this.aggregator!;
 
     this.monitor.on('anomaly', (event: ProfilerEvent) => {
-      aggregator.record(event.type, event.lagMs ?? event.growthBytes ?? 0, event);
+      aggregator.record(event.type, event.lagMs ?? event.growthBytes ?? 0, event as unknown as Record<string, unknown>);
       this.emit('anomaly', event);
     });
     this.monitor.on('error', (err) => this.emit('error', err));
@@ -496,7 +501,7 @@ export class DiagnosticAgent extends EventEmitter {
       const enriched = this.queryAnalyzer
         ? { ...traced, suggestions: this.queryAnalyzer.analyze(traced.sanitizedQuery) }
         : traced;
-      aggregator.record('query', traced.durationMs, enriched);
+      aggregator.record('query', traced.durationMs, enriched as Record<string, unknown>);
       this.emit('query', enriched);
     });
 
@@ -593,6 +598,12 @@ export class DiagnosticAgent extends EventEmitter {
     this.leakMonitor = null;
     this.queryAnalyzer = null;
 
+    // Remove debug console listeners added by useConsoleLogger (if any).
+    for (const [event, fn] of this.debugListeners) {
+      this.off(event, fn);
+    }
+    this.debugListeners = [];
+
     this.running = false;
   }
 
@@ -606,20 +617,29 @@ export class DiagnosticAgent extends EventEmitter {
    *                `'verbose'` — also logs every query and HTTP request
    */
   private useConsoleLogger(prefix = '[DiagAgent]', level: 'warn' | 'verbose' = 'verbose'): this {
-    this.on('anomaly', (a) => console.warn(`${prefix} ANOMALY type=${a.type}`, a));
-    this.on('leak',    (l) => console.warn(`${prefix} LEAK    handles=${l.handlesCount}`));
-    this.on('crash',   (c) => console.error(`${prefix} CRASH   ${c.error?.message ?? c}`));
-    this.on('error',   (e) => console.error(`${prefix} ERROR   ${e?.message ?? e}`));
-    this.on('info',    (m) => console.info(`${prefix} INFO    ${m}`));
-    this.on('log',     (l) => { if (l.scrubbed) console.warn(`${prefix} SCRUB   console.${l.level} contained secrets — redacted`); });
+    const add = (event: string, fn: (...args: unknown[]) => void) => {
+      this.on(event, fn);
+      this.debugListeners.push([event, fn]);
+    };
+
+    add('anomaly', (a) => { const ev = a as { type: string }; console.warn(`${prefix} ANOMALY type=${ev.type}`, a); });
+    add('leak',    (l) => { const ev = l as { handlesCount: number }; console.warn(`${prefix} LEAK    handles=${ev.handlesCount}`); });
+    add('crash',   (c) => { const ev = c as { error?: Error }; console.error(`${prefix} CRASH   ${ev.error?.message ?? c}`); });
+    add('error',   (e) => { const ev = e as Error | undefined; console.error(`${prefix} ERROR   ${ev?.message ?? e}`); });
+    add('info',    (m) => { console.info(`${prefix} INFO    ${String(m)}`); });
+    add('log',     (l) => { const ev = l as { scrubbed: boolean; level: string }; if (ev.scrubbed) console.warn(`${prefix} SCRUB   console.${ev.level} contained secrets — redacted`); });
 
     if (level === 'verbose') {
-      this.on('query', (q) => {
-        const hints = q.suggestions?.map((s: { message: string }) => s.message).join(' | ');
+      add('query', (q) => {
+        const ev = q as { durationMs: number; sanitizedQuery: string; suggestions?: Array<{ message: string }> };
+        const hints = ev.suggestions?.map((s) => s.message).join(' | ');
         const suffix = hints ? `\n  ⚠ ${hints}` : '';
-        console.log(`${prefix} QUERY   [${q.durationMs.toFixed(1)}ms] ${q.sanitizedQuery}${suffix}`);
+        console.log(`${prefix} QUERY   [${ev.durationMs.toFixed(1)}ms] ${ev.sanitizedQuery}${suffix}`);
       });
-      this.on('http',  (r) => console.log(`${prefix} HTTP    ${r.method} ${r.url} → ${r.statusCode ?? '---'} (${r.durationMs.toFixed(1)}ms)`));
+      add('http', (r) => {
+        const ev = r as { method: string; url: string; statusCode?: number; durationMs: number };
+        console.log(`${prefix} HTTP    ${ev.method} ${ev.url} → ${ev.statusCode ?? '---'} (${ev.durationMs.toFixed(1)}ms)`);
+      });
     }
 
     return this;

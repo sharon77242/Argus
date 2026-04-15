@@ -140,7 +140,7 @@ describe('OTLPExporter (coverage)', () => {
       id: '1',
       metricName: 'memory-leak',
       value: 0,
-      payload: null  // no .timestamp property → falls back to Date.now()
+      payload: {}  // no .timestamp property → falls back to Date.now()
     }]);
     const afterMs = Date.now();
 

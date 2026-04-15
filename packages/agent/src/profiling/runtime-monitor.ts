@@ -2,9 +2,10 @@ import { monitorEventLoopDelay, type IntervalHistogram } from "node:perf_hooks";
 import { Session } from "node:inspector";
 import { EventEmitter } from "node:events";
 import { writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { writeHeapSnapshot } from "node:v8";
+import { getHeapSnapshot } from "node:v8";
 
 export interface RuntimeMonitorOptions {
   eventLoopThresholdMs?: number;
@@ -37,6 +38,9 @@ export class RuntimeMonitor extends EventEmitter {
 
   private lastCpuProfileTime = 0;
   private lastMemoryUsage = 0;
+  private consecutiveGrowthTicks = 0;
+  // Require N consecutive above-threshold ticks before firing to suppress single-tick bursts.
+  private static readonly GROWTH_TICKS_REQUIRED = 3;
 
   private inspectorSession: Session | null = null;
   private isProfiling = false;
@@ -101,21 +105,34 @@ export class RuntimeMonitor extends EventEmitter {
     const growth = currentMemory - this.lastMemoryUsage;
 
     if (growth > this.options.memoryGrowthThresholdBytes!) {
-      const snapPath = join(tmpdir(), `heap-snapshot-${Date.now()}.heapsnapshot`);
-      let heapSnapshotPath: string | undefined;
-      try {
-        writeHeapSnapshot(snapPath);
-        heapSnapshotPath = snapPath; // only set if write succeeded
-      } catch (e) {
-        this.emit("error", e);
-      }
+      this.consecutiveGrowthTicks++;
+      if (this.consecutiveGrowthTicks >= RuntimeMonitor.GROWTH_TICKS_REQUIRED) {
+        this.consecutiveGrowthTicks = 0;
+        const snapPath = join(tmpdir(), `heap-snapshot-${Date.now()}.heapsnapshot`);
+        let heapSnapshotPath: string | undefined;
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const snapshot = getHeapSnapshot();
+            const file = createWriteStream(snapPath);
+            snapshot.pipe(file);
+            file.once('finish', resolve);
+            file.once('error', reject);
+            snapshot.once('error', reject);
+          });
+          heapSnapshotPath = snapPath;
+        } catch (e) {
+          this.emit("error", e);
+        }
 
-      this.emit("anomaly", {
-        type: "memory-leak",
-        growthBytes: growth,
-        heapSnapshotPath,
-        timestamp: Date.now(),
-      } satisfies ProfilerEvent);
+        this.emit("anomaly", {
+          type: "memory-leak",
+          growthBytes: growth,
+          heapSnapshotPath,
+          timestamp: Date.now(),
+        } satisfies ProfilerEvent);
+      }
+    } else {
+      this.consecutiveGrowthTicks = 0;
     }
     this.lastMemoryUsage = currentMemory; // Update baseline
   }
@@ -162,20 +179,29 @@ export class RuntimeMonitor extends EventEmitter {
   }
 
   private captureCpuProfile(): Promise<unknown> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       if (!this.inspectorSession) return resolve(null);
+      const session = this.inspectorSession;
 
-      this.inspectorSession.post('Profiler.enable', () => {
+      session.post('Profiler.enable', (enableErr) => {
+        if (enableErr) return reject(enableErr);
         if (!this.inspectorSession) return resolve(null);
-        this.inspectorSession.post('Profiler.start', () => {
+
+        session.post('Profiler.start', (startErr) => {
+          if (startErr) return reject(startErr);
+          if (!this.inspectorSession) return resolve(null);
+
           setTimeout(() => {
             if (!this.inspectorSession) return resolve(null);
-            this.inspectorSession.post('Profiler.stop', (err, res) => {
+
+            session.post('Profiler.stop', (stopErr, res) => {
               if (!this.inspectorSession) return resolve(null);
-              this.inspectorSession.post('Profiler.disable', () => {
-                if (err) resolve(null);
+
+              session.post('Profiler.disable', (disableErr) => {
+                if (stopErr) return reject(stopErr);
+                if (disableErr) return reject(disableErr);
                 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-                else resolve(res?.profile ?? null);
+                resolve(res?.profile ?? null);
               });
             });
           }, this.options.cpuProfileDurationMs);

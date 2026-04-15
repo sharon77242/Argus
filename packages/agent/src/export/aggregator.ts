@@ -5,7 +5,7 @@ export interface AggregatorEvent {
   id: string;
   metricName: string;
   value: number;
-  payload: any;
+  payload: Record<string, unknown>;
 }
 
 export class MetricsAggregator extends EventEmitter {
@@ -32,7 +32,7 @@ export class MetricsAggregator extends EventEmitter {
     this.flush(); // Flush remaining items on shutdown
   }
 
-  public record(metricName: string, value: number, payload: any): void {
+  public record(metricName: string, value: number, payload: Record<string, unknown>): void {
     this.buffer.push({
       id: crypto.randomUUID(),
       metricName,

@@ -3,6 +3,39 @@ import { EventEmitter } from 'node:events';
 import { dirname } from 'node:path';
 import type { FixSuggestion, ScanResult } from './types.ts';
 
+// Minimal TypeScript Compiler API surface used by this scanner.
+// Defined locally so the `typescript` package resolves at runtime only (devDep),
+// and type-checking passes in environments where it is not installed.
+interface TsSystem {
+  fileExists(path: string): boolean;
+  readFile(path: string, encoding?: string): string | undefined;
+}
+interface TsDiagnosticMessageChain {
+  messageText: string;
+  next?: TsDiagnosticMessageChain[];
+}
+interface TsDiagnostic {
+  file?: {
+    fileName: string;
+    getLineAndCharacterOfPosition(pos: number): { line: number; character: number };
+  };
+  start?: number;
+  code: number;
+  messageText: string | TsDiagnosticMessageChain;
+}
+interface TsProgram {
+  getSyntacticDiagnostics(): readonly TsDiagnostic[];
+  getSemanticDiagnostics(): readonly TsDiagnostic[];
+}
+interface TsApi {
+  sys: TsSystem;
+  findConfigFile(searchPath: string, fileExists: (path: string) => boolean, configName?: string): string | undefined;
+  readConfigFile(fileName: string, readFile: (path: string, encoding?: string) => string | undefined): { config?: unknown; error?: TsDiagnostic };
+  parseJsonConfigFileContent(json: unknown, host: TsSystem, basePath: string): { fileNames: string[]; options: Record<string, unknown> };
+  createProgram(rootNames: string[], options: Record<string, unknown>): TsProgram;
+  flattenDiagnosticMessageText(messageText: string | TsDiagnosticMessageChain, newLine: string): string;
+}
+
 /**
  * Maps TypeScript diagnostic codes to severity levels.
  * Unknown codes default to 'info'.
@@ -58,8 +91,11 @@ export class StaticScanner extends EventEmitter {
     try {
       // Dynamic import so typescript stays a devDependency — it will be
       // available in dev/CI environments where withStaticScanner() is used.
-      const tsModule = await import('typescript');
-      const ts = (tsModule.default ?? tsModule) as typeof import('typescript');
+      // A variable is used so TypeScript does not attempt static module resolution
+      // (import(literal) would error when the package is not installed).
+      const tsId = 'typescript';
+      const tsModule: unknown = await import(tsId);
+      const ts = ((tsModule as { default?: TsApi }).default ?? tsModule) as TsApi;
       return this.runTypeScriptAPI(ts, start);
     } catch {
       // typescript not resolvable — fall back to spawning tsc
@@ -68,7 +104,7 @@ export class StaticScanner extends EventEmitter {
   }
 
   private async runTypeScriptAPI(
-    ts: typeof import('typescript'),
+    ts: TsApi,
     start: number,
   ): Promise<ScanResult> {
     const configPath = ts.findConfigFile(this.targetDir, ts.sys.fileExists, 'tsconfig.json');
