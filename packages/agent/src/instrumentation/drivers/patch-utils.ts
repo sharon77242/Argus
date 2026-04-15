@@ -1,4 +1,4 @@
-import diagnostics_channel from 'node:diagnostics_channel';
+import { safeChannel } from '../safe-channel.ts';
 import { AstSanitizer } from '../../sanitization/ast-sanitizer.ts';
 
 const _sanitizer = new AstSanitizer();
@@ -74,7 +74,7 @@ export function wrapMethod(
   if (isAlreadyPatched(target, methodName)) return;
 
   const original = target[methodName] as AnyFn;
-  const channel = diagnostics_channel.channel(AUTO_PATCH_CHANNEL);
+  const channel = safeChannel(AUTO_PATCH_CHANNEL);
 
   const wrapped = function (this: unknown, ...args: unknown[]): unknown {
     const start = performance.now();

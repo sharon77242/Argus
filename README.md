@@ -1,6 +1,6 @@
 # Deep Diagnostic Agent
 
-> **Privacy-first performance profiling & diagnostics for Node.js — minimum Node 18.7 as a compiled package, Node 22.6 for source/dev mode**
+> **Privacy-first performance profiling & diagnostics for Node.js — minimum Node 14.18 as a compiled package, Node 22.6 for source/dev mode**
 
 A lightweight agent that embeds directly into your application — silently tracking runtime behaviour, isolating bottlenecks, and mathematically sanitizing all context before exporting OpenTelemetry (OTLP) telemetry to your observability stack.
 
@@ -22,9 +22,12 @@ A lightweight agent that embeds directly into your application — silently trac
 9. [Environment Variables](#environment-variables)
 10. [Production Safety Reference](#production-safety-reference)
 11. [Privacy Guarantees](#privacy-guarantees)
-12. [Project Structure](#project-structure)
-13. [Low-Level API](#low-level-api)
-14. [License](#license)
+12. [Architecture Layers](#architecture-layers)
+13. [Project Structure](#project-structure)
+14. [Low-Level API](#low-level-api)
+15. [Self-Host Your OTLP Endpoint](#self-host-your-otlp-endpoint)
+16. [SaaS Dashboard — Coming Soon](#saas-dashboard--coming-soon)
+17. [License](#license)
 
 ---
 
@@ -45,16 +48,26 @@ The agent has two distinct usage modes with different Node.js requirements:
 
 | Usage Mode | Min Node.js | When to use |
 |---|---|---|
-| **Compiled npm package** _(recommended for most users)_ | **≥ 18.7.0** | You install the built package in your project via npm |
+| **Compiled npm package** _(recommended for most users)_ | **≥ 14.18.0** | You install the built package in your project via npm |
 | **Source / dev mode** _(this repo, contributors)_ | **≥ 22.6.0** | You run `.ts` files directly with `--experimental-strip-types` |
 
 > [!IMPORTANT]
-> **Most users should use the compiled package** and only need Node ≥ 18.7.0.
+> **Most users should use the compiled package** and only need Node ≥ 14.18.0.
 > The 22.6.0 requirement only applies to running the TypeScript source files directly (e.g. contributors, or the `npm test` / `npm start` scripts in this repo).
 
-### Why 18.7.0 as the compiled minimum?
+### Why 14.18.0 as the compiled minimum?
 
-The binding constraint is `node:diagnostics_channel`, which became stable in **Node 18.7.0**. Everything else the agent uses (`node:perf_hooks`, `node:v8`, `node:inspector`, `node:fs/promises`) has been available since Node 14+. Once this package is compiled to JavaScript, `--experimental-strip-types` is irrelevant — the consumer runs plain `.js`.
+`node:diagnostics_channel` has been present since **Node 14.0.0** (experimental) and became stable in Node 18.7.0. The API surface the agent uses (`.channel()`, `.subscribe()`, `.publish()`, `.unsubscribe()`) has not changed between the two versions, so the compiled package works on any Node ≥ 14.18.0 with two caveats:
+
+| Feature | Minimum Node | Behaviour on older versions |
+|---|---|---|
+| DB query tracing (all 16 drivers) | 14.18.0 | Full support — we control both publisher and subscriber |
+| HTTP outbound tracing | 18.0.0 | Automatic via `diagnostics_channel`; on Node 14–17 the agent falls back to monkey-patching `http.request` / `https.request` automatically |
+| Module load timing (`slow-require`) | 20.0.0 | Silent no-op on Node < 20 (channels absent) |
+| Stream leak auto-detection | 22.0.0 | Falls back to manual `track()` calls on Node < 22 |
+| Worker-threads pool monitoring | 22.0.0 | No auto-detection on Node < 22 |
+
+Everything else (`node:perf_hooks`, `node:v8`, `node:inspector`, `node:fs/promises`) has been available since Node 12+. Once this package is compiled to JavaScript, `--experimental-strip-types` is irrelevant — the consumer runs plain `.js`.
 
 ### ESM & CJS — both supported
 
@@ -75,7 +88,7 @@ const { DiagnosticAgent } = await import('deep-diagnostic-agent');
 
 ## Installation
 
-### Using the compiled package in your project (Node ≥ 18.7)
+### Using the compiled package in your project (Node ≥ 14.18)
 
 ```bash
 npm install deep-diagnostic-agent
@@ -93,7 +106,7 @@ import { DiagnosticAgent } from 'deep-diagnostic-agent';
 git clone <repo>
 npm install
 
-# Run all 202 tests (uses --experimental-strip-types, requires Node 22.6+)
+# Run all 373 tests (uses --experimental-strip-types, requires Node 22.6+)
 npm test
 
 # Build both ESM and CJS outputs
@@ -135,7 +148,7 @@ dist/
 
 | Requirement | Version |
 |---|---|
-| Node.js | ≥ 18.7.0 |
+| Node.js | ≥ 14.18.0 (compiled) / ≥ 22.6.0 (source/dev) |
 | Docker | any recent version |
 | pnpm | ≥ 8 (or npm) |
 
@@ -385,6 +398,7 @@ const agent = await DiagnosticAgent.create()
     handleThreshold: 5000,
     alertCooldownMs: 60_000,                         // Min ms between repeated leak alerts
   })
+  .withGracefulShutdown({ timeoutMs: 5000 })         // SIGTERM/SIGINT → flush → process.exit
   .withQueryAnalysis()                               // AST-based N+1 & query fix suggestions
   .withStaticScanner(process.cwd())                 // ⚠ DEV ONLY — background tsc/eslint
   .withAuditScanner(process.cwd())                  // ⚠ DEV ONLY — npm audit CVE scan
@@ -425,6 +439,8 @@ The agent is an `EventEmitter`. All events are emitted on the `DiagnosticAgent` 
 | `'log'` | `{ level, sanitizedPayload, suggestions }` | `console.*` call intercepted |
 | `'crash'` | `CrashEvent` | `uncaughtException` or `unhandledRejection` received |
 | `'leak'` | `ResourceLeakEvent` | Active OS handle count exceeded threshold |
+| `'scan'` | `StaticScanResult[]` | Background `tsc`/ESLint scan complete (dev/test only) |
+| `'audit'` | `AuditResult` | `npm audit` CVE scan complete (dev/test only) |
 | `'info'` | `string` | Advisory messages (e.g., auto-detection found nothing) |
 | `'error'` | `Error` | Non-fatal internal error (e.g., heap snapshot write failed) |
 
@@ -442,6 +458,15 @@ agent.on('crash', (event) => {
 agent.on('query', (trace) => {
   console.log(trace.sanitizedQuery);  // values NEVER appear here — AST-scrubbed
   trace.suggestions.forEach(s => console.log(s.rule, s.suggestedFix));
+});
+
+agent.on('scan', (results) => {
+  const total = results.reduce((n, r) => n + r.totalIssues, 0);
+  console.log(`Static scan: ${total} issue(s)`);
+});
+
+agent.on('audit', (result) => {
+  console.log(`npm audit: ${result.suggestions?.length ?? 0} high/critical CVE(s)`);
 });
 ```
 
@@ -478,6 +503,7 @@ All thresholds can be overridden without code changes, making the agent CI/CD an
 | `.withRuntimeMonitor(opts?)` | ✅ Yes | Low | Event loop lag + memory leak detection |
 | `.withCrashGuard()` | ✅ Yes | Very Low | Intercepts `uncaughtException`; emits event for `unhandledRejection` |
 | `.withResourceLeakMonitor(opts?)` | ✅ Yes | Low | Tracks OS handles; rate-limited by `alertCooldownMs` |
+| `.withGracefulShutdown(opts?)` | ✅ Yes | Very Low | Registers SIGTERM/SIGINT; awaits `agent.stop()` before `process.exit` |
 | `.withInstrumentation(opts?)` | ✅ Yes | Low | DB/IO tracing via `diagnostics_channel` (16 drivers) |
 | `.withHttpTracing()` | ✅ Yes | Low | HTTP request inspection & slow-request detection |
 | `.withLogTracing(opts?)` | ✅ Yes | Low | `console.*` override with entropy-scrubbed payloads |
@@ -554,12 +580,18 @@ src/
     app-type-detector.ts           → package.json fingerprint scanner
     runtime-monitor.ts             → Event loop lag & heap snapshot profiling
     crash-guard.ts                 → uncaughtException / unhandledRejection handler
+    graceful-shutdown.ts           → SIGTERM/SIGINT flush with configurable timeout
     resource-leak-monitor.ts       → OS handle / socket leak detection
+    slow-require-detector.ts       → CJS module load-time tracking (Node 20+)
+    stream-leak-detector.ts        → Readable/Writable stream leak detection
+    worker-threads-monitor.ts      → Worker pool depth & anomaly tracking (Node 22+)
     source-map-resolver.ts         → .js.map scanning & lazy resolution
 
   instrumentation/
+    safe-channel.ts                → Backward-compatible diagnostics_channel loader (Node 14.18+)
     engine.ts                      → Core InstrumentationEngine
-    http.ts                        → HTTP request tracing
+    correlation.ts                 → AsyncLocalStorage request context & correlationId
+    http.ts                        → HTTP tracing (channel path Node 18+; monkey-patch Node 14–17)
     fs.ts                          → File system operation tracing
     logger.ts                      → console.* override with entropy scrubbing
     drivers/
@@ -590,6 +622,7 @@ src/
     fs-analyzer.ts                 → Sync FS blocker & path traversal detection
     http-analyzer.ts               → Insecure URL & slow request detection
     log-analyzer.ts                → Log storm & payload size detection
+    circuit-breaker-detector.ts    → Sustained error-rate detection across drivers
     static-scanner.ts              → Background tsc / ESLint issue tracking
     audit-scanner.ts               → npm audit CVE scanning
 
@@ -597,7 +630,7 @@ src/
     aggregator.ts                  → p99 sliding window metric aggregation
     exporter.ts                    → OTLP JSON formatter + mTLS transport
 
-tests/                             → Mirrors src/ structure (202 tests, 43 suites)
+tests/                             → Mirrors src/ structure (373 tests, 86 suites)
 ```
 
 ---
@@ -608,25 +641,105 @@ All subsystems are exported individually for advanced composition:
 
 ```typescript
 import {
+  // Profiling
   SourceMapResolver,
   RuntimeMonitor,
-  InstrumentationEngine,
   CrashGuard,
+  GracefulShutdown,
   ResourceLeakMonitor,
+  SlowRequireDetector,
+  StreamLeakDetector,
+  WorkerThreadsMonitor,
+
+  // Instrumentation
+  InstrumentationEngine,
+  HttpInstrumentation,
+  FsInstrumentation,
+  Logger,
+
+  // Sanitization
   AstSanitizer,
   EntropyChecker,
+
+  // Analysis
+  QueryAnalyzer,
+  HttpAnalyzer,
+  FsAnalyzer,
+  LogAnalyzer,
+  CircuitBreakerDetector,
+
+  // Export
   MetricsAggregator,
   OTLPExporter,
-  QueryAnalyzer,
 } from 'deep-diagnostic-agent';
 
 // Example: standalone entropy checker
 import { EntropyChecker } from 'deep-diagnostic-agent';
 const checker = new EntropyChecker();
 const sanitized = checker.scrub('Bearer eyJhbGc...');  // → 'Bearer [REDACTED]'
+
+// Example: standalone circuit-breaker detector
+import { CircuitBreakerDetector } from 'deep-diagnostic-agent';
+const cbd = new CircuitBreakerDetector();
+const suggestions = cbd.analyze(recentQueryEvents);
 ```
 
 > **Source mode (contributors):** replace `'deep-diagnostic-agent'` with `'./src/index.ts'` and run with `node --experimental-strip-types` on Node 22.6+.
+
+---
+
+## Self-Host Your OTLP Endpoint
+
+The agent exports standard OTLP JSON — any compatible collector works. Below is the quickest local setup using Jaeger's all-in-one image.
+
+### Jaeger (quickest local setup)
+
+```yaml
+# docker-compose.jaeger.yml — save this alongside your project
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "4318:4318"   # OTLP HTTP receiver
+      - "16686:16686" # Jaeger UI
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+```
+
+```bash
+docker compose -f docker-compose.jaeger.yml up -d
+```
+
+Then point the agent at it:
+
+```typescript
+const agent = await DiagnosticAgent.createProfile({ environment: 'dev', appType: ['web', 'db'] })
+  .withExporter({ endpointUrl: 'http://localhost:4318/v1/traces' })   // no TLS needed locally
+  .start();
+```
+
+Open `http://localhost:16686` to browse traces.
+
+### Other compatible destinations
+
+| Destination | OTLP endpoint |
+|---|---|
+| [Grafana Alloy](https://grafana.com/docs/alloy/) | `http://localhost:4318/v1/traces` (default) |
+| [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) | configure `otlp` receiver on port 4318 |
+| Datadog, New Relic, Honeycomb | use their OTLP ingest URLs with an API key header |
+
+> [!NOTE]
+> The `key`/`cert`/`ca` fields in `withExporter` are optional — omit them for plaintext local endpoints. mTLS is only needed for production remote collectors.
+
+---
+
+## SaaS Dashboard — Coming Soon
+
+Local suggestions fire today with zero account required.
+A hosted dashboard with 30-day query history, AI-powered fix suggestions,
+and cross-service correlation is in development.
+
+→ [Join the waitlist](https://argus.dev/waitlist) to be notified at launch.
 
 ---
 

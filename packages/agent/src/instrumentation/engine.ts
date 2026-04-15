@@ -1,5 +1,5 @@
-import diagnostics_channel from "node:diagnostics_channel";
 import { EventEmitter } from "node:events";
+import { safeChannel } from "./safe-channel.ts";
 import { AstSanitizer } from "../sanitization/ast-sanitizer.ts";
 import { getCurrentContext } from "./correlation.ts";
 
@@ -19,7 +19,7 @@ export interface InstrumentationOptions {
 }
 
 export class InstrumentationEngine extends EventEmitter {
-  private activeSubscriptions = new Map<string, diagnostics_channel.ChannelListener>();
+  private activeSubscriptions = new Map<string, (msg: unknown) => void>();
   private astSanitizer = new AstSanitizer();
   private options: InstrumentationOptions;
 
@@ -54,15 +54,13 @@ export class InstrumentationEngine extends EventEmitter {
 
   public disable(): void {
     for (const [name, listener] of this.activeSubscriptions.entries()) {
-      const channel = diagnostics_channel.channel(name);
-      channel.unsubscribe(listener);
+      safeChannel(name).unsubscribe(listener);
     }
     this.activeSubscriptions.clear();
   }
 
-  private subscribeToChannel(name: string, listener: diagnostics_channel.ChannelListener) {
-    const channel = diagnostics_channel.channel(name);
-    channel.subscribe(listener);
+  private subscribeToChannel(name: string, listener: (msg: unknown) => void) {
+    safeChannel(name).subscribe(listener);
     this.activeSubscriptions.set(name, listener);
   }
 

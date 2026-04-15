@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
+import { getDiagnosticsChannel } from '../instrumentation/safe-channel.ts';
 
 export interface StreamLeakEvent {
   type: 'stream-leak';
@@ -55,8 +56,8 @@ export class StreamLeakDetector extends EventEmitter {
     this.active = true;
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const dc = require('node:diagnostics_channel') as typeof import('node:diagnostics_channel');
+      const dc = getDiagnosticsChannel();
+      if (!dc) throw new Error('unavailable');
       const createChannel = dc.channel('stream.create');
       const destroyChannel = dc.channel('stream.destroy');
 

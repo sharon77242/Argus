@@ -23,7 +23,7 @@
   ],
   "type": "module",
   "engines": {
-    "node": ">=22.6.0"
+    "node": ">=14.18.0"
   },
   "scripts": {
     "build:esm": "tsc -p tsconfig.build.json",

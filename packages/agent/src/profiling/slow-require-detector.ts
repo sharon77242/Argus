@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { performance } from 'node:perf_hooks';
+import { getDiagnosticsChannel } from '../instrumentation/safe-channel.ts';
 
 export interface SlowModuleRecord {
   module: string;
@@ -116,14 +117,5 @@ export class SlowRequireDetector extends EventEmitter {
     return [...this.timings.entries()]
       .map(([module, durationMs]) => ({ module, durationMs }))
       .sort((a, b) => b.durationMs - a.durationMs);
-  }
-}
-
-function getDiagnosticsChannel(): typeof import('node:diagnostics_channel') | null {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('node:diagnostics_channel') as typeof import('node:diagnostics_channel');
-  } catch {
-    return null;
   }
 }

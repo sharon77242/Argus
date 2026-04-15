@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { performance } from 'node:perf_hooks';
+import { getDiagnosticsChannel } from '../instrumentation/safe-channel.ts';
 
 export interface WorkerPoolMetrics {
   activeWorkers: number;
@@ -63,8 +64,8 @@ export class WorkerThreadsMonitor extends EventEmitter {
 
     // Attempt to hook via diagnostics_channel (Node 22+)
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const dc = require('node:diagnostics_channel') as typeof import('node:diagnostics_channel');
+      const dc = getDiagnosticsChannel();
+      if (!dc) throw new Error('unavailable');
       const ch = dc.channel('worker_threads.Worker.created');
       ch.subscribe(() => {
         this.activeWorkers++;
