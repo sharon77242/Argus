@@ -136,12 +136,12 @@ export class OTLPExporter {
         {
           resource: {
             attributes: [
-              { key: "service.name", value: { stringValue: "deep-diagnostic-agent" } }
+              { key: "service.name", value: { stringValue: "argus" } }
             ]
           },
           scopeSpans: [
             {
-              scope: { name: "deep-diagnostic-agent", version: "1.0.0" },
+              scope: { name: "argus", version: "1.0.0" },
               spans: spans
             }
           ]

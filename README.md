@@ -1,6 +1,6 @@
-# Deep Diagnostic Agent
+# Argus
 
-> **Privacy-first performance profiling & diagnostics for Node.js — minimum Node 14.18 as a compiled package, Node 22.6 for source/dev mode**
+> **Privacy-first performance diagnostics for Node.js — minimum Node 14.18 as a compiled package, Node 22.6 for source/dev mode**
 
 A lightweight agent that embeds directly into your application — silently tracking runtime behaviour, isolating bottlenecks, and mathematically sanitizing all context before exporting OpenTelemetry (OTLP) telemetry to your observability stack.
 
@@ -75,13 +75,13 @@ This package ships a **dual build**: ESM and CommonJS. Node.js picks the right f
 
 ```js
 // ✅ ESM project (type:module or .mjs)
-import { DiagnosticAgent } from 'deep-diagnostic-agent';
+import { DiagnosticAgent } from 'argus';
 
 // ✅ CommonJS project — require() works directly
-const { DiagnosticAgent } = require('deep-diagnostic-agent');
+const { DiagnosticAgent } = require('argus');
 
 // ✅ CommonJS project — dynamic import also works
-const { DiagnosticAgent } = await import('deep-diagnostic-agent');
+const { DiagnosticAgent } = await import('argus');
 ```
 
 ---
@@ -91,13 +91,13 @@ const { DiagnosticAgent } = await import('deep-diagnostic-agent');
 ### Using the compiled package in your project (Node ≥ 14.18)
 
 ```bash
-npm install deep-diagnostic-agent
+npm install argus
 ```
 
 Then import from the compiled entry point:
 
 ```typescript
-import { DiagnosticAgent } from 'deep-diagnostic-agent';
+import { DiagnosticAgent } from 'argus';
 ```
 
 ### Building from source (Node ≥ 22.6, contributors only)
@@ -181,7 +181,7 @@ This starts the server, runs a scripted traffic sequence, then exits. You should
 
 ```
 ╔══════════════════════════════════════════╗
-║  Deep Diagnostic Agent — ACTIVE          ║
+║  Argus — ACTIVE                          ║
 ╚══════════════════════════════════════════╝
 
 20:36:19.791 [QUERY] [pg] SELECT id, quote, author FROM quote OFFSET $? LIMIT $? (50.3ms)
@@ -283,7 +283,7 @@ docker compose -f docker-compose-pg-only.yml down
 
 ```typescript
 // Compiled npm package
-import { DiagnosticAgent } from 'deep-diagnostic-agent';
+import { DiagnosticAgent } from 'argus';
 
 // Or if running source directly (Node 22.6+)
 // import { DiagnosticAgent } from './src/index.ts';
@@ -383,7 +383,7 @@ const result = DiagnosticAgent.detectAppTypes('./my-service');
 For maximum control, compose the agent manually using the fluent builder:
 
 ```typescript
-import { DiagnosticAgent } from 'deep-diagnostic-agent';
+import { DiagnosticAgent } from 'argus';
 import fs from 'node:fs';
 
 const agent = await DiagnosticAgent.create()
@@ -671,20 +671,20 @@ import {
   // Export
   MetricsAggregator,
   OTLPExporter,
-} from 'deep-diagnostic-agent';
+} from 'argus';
 
 // Example: standalone entropy checker
-import { EntropyChecker } from 'deep-diagnostic-agent';
+import { EntropyChecker } from 'argus';
 const checker = new EntropyChecker();
 const sanitized = checker.scrub('Bearer eyJhbGc...');  // → 'Bearer [REDACTED]'
 
 // Example: standalone circuit-breaker detector
-import { CircuitBreakerDetector } from 'deep-diagnostic-agent';
+import { CircuitBreakerDetector } from 'argus';
 const cbd = new CircuitBreakerDetector();
 const suggestions = cbd.analyze(recentQueryEvents);
 ```
 
-> **Source mode (contributors):** replace `'deep-diagnostic-agent'` with `'./src/index.ts'` and run with `node --experimental-strip-types` on Node 22.6+.
+> **Source mode (contributors):** replace `'argus'` with `'./src/index.ts'` and run with `node --experimental-strip-types` on Node 22.6+.
 
 ---
 

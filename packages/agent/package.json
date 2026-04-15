@@ -1,7 +1,7 @@
 {
-  "name": "deep-diagnostic-agent",
+  "name": "argus",
   "version": "0.2.0",
-  "description": "Privacy-first performance profiling & diagnostics agent for Node.js",
+  "description": "Privacy-first performance diagnostics for Node.js — Argus",
   "main": "dist/cjs/index.cjs",
   "module": "dist/esm/index.js",
   "types": "dist/esm/index.d.ts",

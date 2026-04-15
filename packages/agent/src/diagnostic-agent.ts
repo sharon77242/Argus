@@ -41,7 +41,7 @@ export interface AgentProfileConfig {
 }
 
 /**
- * High-level fluent builder for the Deep Diagnostic Agent.
+ * High-level fluent builder for Argus.
  *
  * Wires together all subsystems (source maps, runtime monitoring,
  * instrumentation, aggregation, export) behind a single chainable API.
