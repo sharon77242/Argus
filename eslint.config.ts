@@ -14,12 +14,6 @@ export default tseslint.config(
     files: ["src/**/*.ts", "tests/**/*.ts"],
 
     rules: {
-      // Allow explicit any for playground flexibility
-      "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-unsafe-assignment": "off",
-      "@typescript-eslint/no-unsafe-call": "off",
-      "@typescript-eslint/no-unsafe-member-access": "off",
-
       // Style preferences
       "@typescript-eslint/consistent-type-definitions": "off",
       "@typescript-eslint/consistent-type-imports": [
@@ -39,6 +33,13 @@ export default tseslint.config(
   {
     files: ["tests/**/*.ts"],
     rules: {
+      // Tests use `any` extensively for mocking, private-field access, and event destructuring.
+      // Enforce type safety in src instead (these rules are active there by default).
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+
       "@typescript-eslint/no-unsafe-return": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/no-floating-promises": "off",

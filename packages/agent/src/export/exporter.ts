@@ -12,6 +12,10 @@ export interface ExporterConfig {
   maxRetries?: number;
   /** Base delay between retries in ms (doubles each attempt). Default: 1000. */
   retryDelayMs?: number;
+  /** OTLP resource service.name attribute. Default: 'argus'. */
+  serviceName?: string;
+  /** OTLP scope version attribute. Default: '1.0.0'. */
+  serviceVersion?: string;
 }
 
 /** Retryable: network errors and 5xx responses. Not retryable: 4xx and bad URLs. */
@@ -131,17 +135,19 @@ export class OTLPExporter {
       };
     });
 
+    const serviceName = this.config.serviceName ?? 'argus';
+    const serviceVersion = this.config.serviceVersion ?? '1.0.0';
     return {
       resourceSpans: [
         {
           resource: {
             attributes: [
-              { key: "service.name", value: { stringValue: "argus" } }
+              { key: "service.name", value: { stringValue: serviceName } }
             ]
           },
           scopeSpans: [
             {
-              scope: { name: "argus", version: "1.0.0" },
+              scope: { name: serviceName, version: serviceVersion },
               spans: spans
             }
           ]

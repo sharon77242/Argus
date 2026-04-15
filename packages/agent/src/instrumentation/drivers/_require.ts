@@ -7,11 +7,15 @@ import { createRequire } from 'node:module';
 //
 // We deliberately avoid `import.meta.url` here because this file is also compiled
 // to CJS via tsc, where `import.meta` is not available.
-const _base: string =
-  /* CJS */  (typeof (globalThis as any).module?.filename === 'string')
-    ? (globalThis as any).module.filename
-  /* ESM native TS (type-strip) — process.execPath gives a valid dir for relative requires */
-    : (process as any).mainModule?.filename ?? process.cwd() + '/_require.js';
+// Access CJS `module.filename` (not in TS global types) and deprecated `process.mainModule`.
+const _globalRecord = globalThis as Record<string, unknown>;
+const _cjsMod = _globalRecord['module'];
+const _cjsFilename =
+  typeof _cjsMod === 'object' && _cjsMod !== null
+    ? ((_cjsMod as Record<string, unknown>)['filename'] as string | undefined)
+    : undefined;
+const _legacyMain = (process as unknown as { mainModule?: { filename?: string } }).mainModule;
+const _base: string = _cjsFilename ?? _legacyMain?.filename ?? `${process.cwd()}/_require.js`;
 
 const _nodeRequire: NodeRequire = createRequire(_base);
 
@@ -19,6 +23,7 @@ const _nodeRequire: NodeRequire = createRequire(_base);
 export const requireRef = { current: _nodeRequire };
 
 /** Delegates to requireRef.current — swappable in tests. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- require() is inherently untyped; callers handle the returned value
 export function nodeRequire(id: string): any {
   return requireRef.current(id);
 }

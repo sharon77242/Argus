@@ -11,7 +11,19 @@ import { SourceMapResolver } from '../../src/profiling/source-map-resolver.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import ts from 'typescript';
+
+// Pre-baked fixture for the cache-hit test — equivalent to ts.transpileModule output for
+// `export const x = 1;\n` with target ES2022 (trivial one-liner, no transformation needed).
+// Mappings: JS line 1, col 0 → TS line 1, col 0  (AAAA = four zeros in VLQ)
+const CACHED_JS = `export const x = 1;\n`;
+const CACHED_MAP = JSON.stringify({
+  version: 3,
+  file: 'cached.js',
+  sourceRoot: '',
+  sources: ['cached.ts'],
+  names: [],
+  mappings: 'AAAA',
+});
 
 describe('SourceMapResolver (coverage)', () => {
   let tempDir: string;
@@ -36,21 +48,11 @@ describe('SourceMapResolver (coverage)', () => {
 
   // ── getConsumer cache hit ────────────────────────────────────────────────
   it('should return cached consumer on second resolvePosition call', async () => {
-    // Create a compiled JS + source map pair
-    const tsCode = `export const x = 1;\n`;
-    const compiled = ts.transpileModule(tsCode, {
-      compilerOptions: { sourceMap: true, target: ts.ScriptTarget.ES2022 },
-      fileName: 'cached.ts'
-    });
-
     const jsPath = path.join(tempDir, 'cached.js');
     const mapPath = path.join(tempDir, 'cached.js.map');
 
-    const mapObj = JSON.parse(compiled.sourceMapText!);
-    mapObj.sources = ['cached.ts'];
-
-    fs.writeFileSync(jsPath, compiled.outputText);
-    fs.writeFileSync(mapPath, JSON.stringify(mapObj));
+    fs.writeFileSync(jsPath, CACHED_JS);
+    fs.writeFileSync(mapPath, CACHED_MAP);
 
     const resolver = new SourceMapResolver(tempDir);
     await resolver.initialize();

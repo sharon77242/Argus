@@ -5,7 +5,7 @@ export class LogAnalyzer {
   private readonly ERROR_WINDOW_MS = 1000;
   private readonly ERROR_THRESHOLD = 5;
 
-  public analyze(args: any[], level = 'log'): FixSuggestion[] {
+  public analyze(args: unknown[], level = 'log'): FixSuggestion[] {
     const suggestions: FixSuggestion[] = [];
 
     // 1. Unstructured Logging Warning

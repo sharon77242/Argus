@@ -36,7 +36,7 @@ export class CrashGuard extends EventEmitter {
     this.handleCrash('uncaughtException', error);
   };
 
-  private handleUnhandledRejection = (reason: any) => {
+  private handleUnhandledRejection = (reason: unknown) => {
     const error = reason instanceof Error ? reason : new Error(String(reason));
     this.handleCrash('unhandledRejection', error);
   };
