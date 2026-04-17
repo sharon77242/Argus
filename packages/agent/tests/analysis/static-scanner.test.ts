@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { StaticScanner } from '../../src/analysis/static-scanner.ts';
+import type { ScanResult } from '../../src/analysis/types.ts';
 
 describe('StaticScanner', () => {
   it('should run TypeScript scan and return a ScanResult', async () => {
@@ -20,7 +21,7 @@ describe('StaticScanner', () => {
   it('should run full scan and emit scan event', async () => {
     const scanner = new StaticScanner(process.cwd());
 
-    let emittedResults: any = null;
+    let emittedResults: ScanResult[] | null = null;
     scanner.on('scan', (results) => { emittedResults = results; });
 
     const results = await scanner.scan();

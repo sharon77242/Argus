@@ -2,7 +2,7 @@ import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import diagnostics_channel from 'node:diagnostics_channel';
 
-import { patchMethod, removeDriverPatches, AUTO_PATCH_CHANNEL } from '../../src/instrumentation/drivers/index.ts';
+import { patchMethod, removeDriverPatches, AUTO_PATCH_CHANNEL, type PatchedQueryMessage } from '../../src/instrumentation/drivers/index.ts';
 
 describe('Driver Auto-Patching', () => {
 
@@ -22,8 +22,8 @@ describe('Driver Auto-Patching', () => {
 
     // Subscribe to the channel to verify a message arrives
     const channel = diagnostics_channel.channel(AUTO_PATCH_CHANNEL);
-    const messagePromise = new Promise<any>(resolve => {
-      const listener = (message: any) => {
+    const messagePromise = new Promise<PatchedQueryMessage>(resolve => {
+      const listener = (message: PatchedQueryMessage) => {
         channel.unsubscribe(listener);
         resolve(message);
       };
@@ -54,7 +54,7 @@ describe('Driver Auto-Patching', () => {
     patchMethod(mockProto, 'query', 'mock-cb-driver');
 
     const channel = diagnostics_channel.channel(AUTO_PATCH_CHANNEL);
-    const listener = (message: any) => {
+    const listener = (message: PatchedQueryMessage) => {
       channel.unsubscribe(listener);
       assert.strictEqual(message.query, 'SELECT 1');
       assert.strictEqual(message.driver, 'mock-cb-driver');
@@ -101,8 +101,8 @@ describe('Driver Auto-Patching', () => {
     patchMethod(mockProto, 'query', 'config-driver');
 
     const channel = diagnostics_channel.channel(AUTO_PATCH_CHANNEL);
-    const messagePromise = new Promise<any>(resolve => {
-      const listener = (message: any) => {
+    const messagePromise = new Promise<PatchedQueryMessage>(resolve => {
+      const listener = (message: PatchedQueryMessage) => {
         channel.unsubscribe(listener);
         resolve(message);
       };

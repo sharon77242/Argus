@@ -25,6 +25,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DiagnosticAgent } from '../src/diagnostic-agent.ts';
 import http from 'node:http';
+import { type AddressInfo } from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -140,8 +141,8 @@ describe('DiagnosticAgent (extended coverage)', () => {
     const start = Date.now();
     while (Date.now() - start < 80) { /* busy wait */ }
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
-    const [event] = await Promise.race([anomalyPromise, timeout]) as any;
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+    const [event] = await Promise.race([anomalyPromise, timeout]);
 
     assert.strictEqual(event.type, 'event-loop-lag');
   });
@@ -161,15 +162,15 @@ describe('DiagnosticAgent (extended coverage)', () => {
       res.end('ok');
     });
     await new Promise<void>(resolve => server.listen(0, resolve));
-    const port = (server.address() as any).port;
+    const port = (server.address() as AddressInfo).port;
 
     const req = http.request(`http://localhost:${port}/test`, (res) => {
       res.resume();
     });
     req.end();
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
-    const [httpEvent] = await Promise.race([httpPromise, timeout]) as any;
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+    const [httpEvent] = await Promise.race([httpPromise, timeout]);
 
     server.close();
 
@@ -189,8 +190,8 @@ describe('DiagnosticAgent (extended coverage)', () => {
     fs.writeFileSync(tmpFile, 'test');
     try { fs.unlinkSync(tmpFile); } catch {}
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 1000));
-    const [fsEvent] = await Promise.race([fsPromise, timeout]) as any;
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 1000));
+    const [fsEvent] = await Promise.race([fsPromise, timeout]);
 
     assert.strictEqual(fsEvent.method, 'writeFileSync');
   });
@@ -204,8 +205,8 @@ describe('DiagnosticAgent (extended coverage)', () => {
     const logPromise = once(agent, 'log');
     console.log('test log message from agent coverage test');
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 1000));
-    const [logEvent] = await Promise.race([logPromise, timeout]) as any;
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 1000));
+    const [logEvent] = await Promise.race([logPromise, timeout]);
 
     // TracedLog shape: { level, durationMs, argsLength, scrubbed, timestamp, ... }
     assert.strictEqual(logEvent.level, 'log', 'Should have captured log level');
@@ -226,8 +227,8 @@ describe('DiagnosticAgent (extended coverage)', () => {
     // Trigger directly to avoid touching process.on
     (crashGuard as any).handleCrash('uncaughtException', new Error('boom'));
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 1000));
-    const [crashEvent] = await Promise.race([crashPromise, timeout]) as any;
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 1000));
+    const [crashEvent] = await Promise.race([crashPromise, timeout]);
 
     assert.strictEqual(crashEvent.type, 'uncaughtException');
   });
@@ -241,8 +242,8 @@ describe('DiagnosticAgent (extended coverage)', () => {
 
     const leakPromise = once(agent, 'leak');
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
-    const [leakEvent] = await Promise.race([leakPromise, timeout]) as any;
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+    const [leakEvent] = await Promise.race([leakPromise, timeout]);
 
     assert.ok(typeof leakEvent.handlesCount === 'number');
   });
@@ -322,9 +323,9 @@ describe('DiagnosticAgent (extended coverage)', () => {
       // Force flush
       aggregator.flush();
 
-      const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+      const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
       // Should have an error emitted from the failed export
-      const [err] = await Promise.race([errorPromise, timeout]) as any;
+      const [err] = await Promise.race([errorPromise, timeout]);
       assert.ok(err instanceof Error, 'Should emit an Error');
     } finally {
       delete process.env.DIAGNOSTIC_LICENSE_KEY;
@@ -341,8 +342,8 @@ describe('DiagnosticAgent (extended coverage)', () => {
     const queryPromise = once(agent, 'query');
     await agent.traceQuery('SELECT * FROM users', async () => 'done');
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 1000));
-    const [queryEvent] = await Promise.race([queryPromise, timeout]) as any;
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 1000));
+    const [queryEvent] = await Promise.race([queryPromise, timeout]);
 
     assert.ok(Array.isArray(queryEvent.suggestions), 'Should have suggestions attached');
     assert.ok(queryEvent.suggestions.length > 0);

@@ -17,6 +17,11 @@ import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import diagnostics_channel from 'node:diagnostics_channel';
 import { DiagnosticAgent } from '../../src/diagnostic-agent.ts';
+import type { TracedQuery } from '../../src/instrumentation/engine.ts';
+import type { TracedLog } from '../../src/instrumentation/logger.ts';
+import type { TracedHttpRequest } from '../../src/instrumentation/http.ts';
+import type { CrashEvent } from '../../src/profiling/crash-guard.ts';
+import type { ResourceLeakEvent } from '../../src/profiling/resource-leak-monitor.ts';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -125,7 +130,7 @@ describe('Scenario: Containerized Web + DB + Worker', () => {
 
   describe('3. DB layer — query tracing + SQL sanitization', () => {
     it('captures and sanitizes a diagnostics_channel query event', async () => {
-      const captured: any[] = [];
+      const captured: TracedQuery[] = [];
 
       const agent = DiagnosticAgent.create()
         .withInstrumentation({ autoPatching: false })
@@ -151,7 +156,7 @@ describe('Scenario: Containerized Web + DB + Worker', () => {
     });
 
     it('traceQuery() wraps arbitrary async execution and emits an event', async () => {
-      const captured: any[] = [];
+      const captured: TracedQuery[] = [];
 
       const agent = DiagnosticAgent.create().withInstrumentation();
       agent.on('query', (q) => captured.push(q));
@@ -173,7 +178,7 @@ describe('Scenario: Containerized Web + DB + Worker', () => {
     });
 
     it('traceQuery() still emits on failure', async () => {
-      const captured: any[] = [];
+      const captured: TracedQuery[] = [];
 
       const agent = DiagnosticAgent.create().withInstrumentation();
       agent.on('query', (q) => captured.push(q));
@@ -198,7 +203,7 @@ describe('Scenario: Containerized Web + DB + Worker', () => {
 
   describe('4. Logger — secret scrubbing via log tracing', () => {
     it('scrubs high-entropy secrets from console output', async () => {
-      const logEvents: any[] = [];
+      const logEvents: TracedLog[] = [];
 
       const agent = DiagnosticAgent.create().withLogTracing({ entropyThreshold: 3.5 });
       agent.on('log', (l) => logEvents.push(l));
@@ -221,7 +226,7 @@ describe('Scenario: Containerized Web + DB + Worker', () => {
 
   describe('5. HTTP layer — outgoing request tracing', () => {
     it('agent starts with HTTP tracing enabled without errors', async () => {
-      const httpEvents: any[] = [];
+      const httpEvents: TracedHttpRequest[] = [];
 
       const agent = DiagnosticAgent.create()
         .withHttpTracing()
@@ -241,7 +246,7 @@ describe('Scenario: Containerized Web + DB + Worker', () => {
 
   describe('6. Crash Guard — uncaught exception telemetry', () => {
     it('crash guard enables and disables cleanly', async () => {
-      const crashEvents: any[] = [];
+      const crashEvents: CrashEvent[] = [];
 
       const agent = DiagnosticAgent.create().withCrashGuard();
       agent.on('crash', (e) => crashEvents.push(e));
@@ -260,7 +265,7 @@ describe('Scenario: Containerized Web + DB + Worker', () => {
 
   describe('7. Resource Leak Monitor — handle exhaustion detection', () => {
     it('starts and stops the leak monitor without error', async () => {
-      const leakEvents: any[] = [];
+      const leakEvents: ResourceLeakEvent[] = [];
 
       const agent = DiagnosticAgent.create().withResourceLeakMonitor({
         handleThreshold: 1, // Deliberately low so it could fire

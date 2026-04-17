@@ -1,13 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { HttpInstrumentation } from '../../src/instrumentation/http.ts';
+import { type AddressInfo } from 'node:net';
+import { HttpInstrumentation, type TracedHttpRequest } from '../../src/instrumentation/http.ts';
 import { runWithContext, createRequestContext } from '../../src/instrumentation/correlation.ts';
 
 describe('HttpInstrumentation', () => {
   it('should trace an outgoing HTTP request using diagnostics channel', async () => {
     const instrumentation = new HttpInstrumentation(() => 'test.ts:1');
-    let capturedRequest: any = null;
+    let capturedRequest: TracedHttpRequest | null = null;
 
     instrumentation.on('request', (req) => {
       capturedRequest = req;
@@ -22,7 +23,7 @@ describe('HttpInstrumentation', () => {
     });
 
     await new Promise<void>((resolve) => server.listen(0, resolve));
-    const port = (server.address() as any).port;
+    const port = (server.address() as AddressInfo).port;
 
     const req = http.request(`http://localhost:${port}/test-path`, (res) => {
       res.on('data', () => {});

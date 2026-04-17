@@ -11,10 +11,15 @@ export interface CrashEvent {
 export class CrashGuard extends EventEmitter {
   private active = false;
   private resolveStack: (stack: string) => string;
+  private beforeExit?: () => Promise<void>;
 
-  constructor(resolveStack: (stack: string) => string = (s) => s) {
+  constructor(
+    resolveStack: (stack: string) => string = (s) => s,
+    beforeExit?: () => Promise<void>,
+  ) {
     super();
     this.resolveStack = resolveStack;
+    this.beforeExit = beforeExit;
   }
 
   public enable(): void {
@@ -65,13 +70,26 @@ export class CrashGuard extends EventEmitter {
     // unhandledRejection is observable/recoverable in Node ≥ 15 and should NOT kill
     // the process — the app (or its framework) may have its own rejection handling.
     if (type === 'uncaughtException') {
-      // Give telemetry buffer 100ms to flush before physically shutting down.
-      setTimeout(() => {
+      // Flush telemetry before shutting down. If a beforeExit hook is registered
+      // (e.g. DiagnosticAgent.stop()), await it; fall back to a 100 ms blind wait
+      // so the exit is never blocked indefinitely on a broken flush path.
+      const flushAndExit = async () => {
+        try {
+          if (this.beforeExit) {
+            await Promise.race([
+              this.beforeExit(),
+              new Promise<void>(r => setTimeout(r, 2000)), // 2s hard deadline
+            ]);
+          } else {
+            await new Promise<void>(r => setTimeout(r, 100));
+          }
+        } catch { /* ignore flush errors during crash */ }
         // In tests, we do not want to actually kill the runner.
         if (process.env.NODE_ENV !== 'test') {
           process.exit(1);
         }
-      }, 100);
+      };
+      void flushAndExit();
     }
   }
 }

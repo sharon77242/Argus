@@ -27,7 +27,7 @@ describe('OTLPExporter', () => {
     assert.ok(span.traceId.length === 32);
     assert.ok(span.spanId.length === 16);
     assert.strictEqual(
-      span.attributes.find((a: any) => a.key === 'diagnostic.value')?.value.doubleValue,
+      span.attributes.find((a: { key: string; value: { doubleValue?: number } }) => a.key === 'diagnostic.value')?.value.doubleValue,
       100
     );
   });

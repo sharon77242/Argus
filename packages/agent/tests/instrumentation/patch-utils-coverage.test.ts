@@ -6,7 +6,7 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import diagnostics_channel from 'node:diagnostics_channel';
-import { AUTO_PATCH_CHANNEL, wrapMethod, activePatches, patchMethod } from '../../src/instrumentation/drivers/patch-utils.ts';
+import { AUTO_PATCH_CHANNEL, wrapMethod, activePatches, patchMethod, type PatchedQueryMessage } from '../../src/instrumentation/drivers/patch-utils.ts';
 
 describe('patch-utils (coverage)', () => {
 
@@ -29,8 +29,8 @@ describe('patch-utils (coverage)', () => {
     wrapMethod(mockProto, 'query', 'test-reject');
 
     const ch = diagnostics_channel.channel(AUTO_PATCH_CHANNEL);
-    const messages: any[] = [];
-    const listener = (msg: any) => messages.push(msg);
+    const messages: PatchedQueryMessage[] = [];
+    const listener = (msg: PatchedQueryMessage) => messages.push(msg);
     ch.subscribe(listener);
 
     try {
@@ -56,8 +56,8 @@ describe('patch-utils (coverage)', () => {
     wrapMethod(mockProto, 'exec', 'sync-driver');
 
     const ch = diagnostics_channel.channel(AUTO_PATCH_CHANNEL);
-    const messages: any[] = [];
-    const listener = (msg: any) => messages.push(msg);
+    const messages: PatchedQueryMessage[] = [];
+    const listener = (msg: PatchedQueryMessage) => messages.push(msg);
     ch.subscribe(listener);
 
     try {
@@ -80,8 +80,8 @@ describe('patch-utils (coverage)', () => {
     wrapMethod(mockProto, 'query', 'coerce-driver');
 
     const ch = diagnostics_channel.channel(AUTO_PATCH_CHANNEL);
-    const messages: any[] = [];
-    const listener = (msg: any) => messages.push(msg);
+    const messages: PatchedQueryMessage[] = [];
+    const listener = (msg: PatchedQueryMessage) => messages.push(msg);
     ch.subscribe(listener);
 
     try {

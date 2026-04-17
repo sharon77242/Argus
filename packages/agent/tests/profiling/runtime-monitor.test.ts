@@ -30,10 +30,16 @@ describe("RuntimeMonitor", () => {
 
     localMonitor.start();
 
-    const p = once(localMonitor, "anomaly");
+    // Listen specifically for memory-leak events; ignore event-loop-lag which
+    // fires first when the allocation loop blocks the event loop briefly.
+    const p = new Promise<ProfilerEvent>(resolve => {
+      localMonitor.on("anomaly", (e) => {
+        if (e.type === "memory-leak") resolve(e);
+      });
+    });
 
     // Artificial memory growth simulation
-    const arr: any[] = [];
+    const arr: string[][] = [];
 
     // Wait a bit for baseline to establish
     await sleep(10);
@@ -43,11 +49,11 @@ describe("RuntimeMonitor", () => {
     }
 
     // Give it time to poll, monitor uses unref interval so we need sleep to keep event loop alive
-    const timeoutPromise = new Promise((_, reject) =>
+    const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("Timeout waiting for memory leak")), 1000),
     );
 
-    const [event] = (await Promise.race([p, timeoutPromise])) as any;
+    const event = await Promise.race([p, timeoutPromise]);
 
     assert.strictEqual(event.type, "memory-leak");
     assert.ok(event.growthBytes! > 1024);
@@ -79,7 +85,7 @@ describe("RuntimeMonitor", () => {
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error("Timeout waiting for lag event")), 1000),
     );
-    const [event] = (await Promise.race([p, timeoutPromise])) as any;
+    const [event] = await Promise.race([p, timeoutPromise]);
 
     assert.strictEqual(event.type, "event-loop-lag");
     assert.ok(event.lagMs! >= 20);
