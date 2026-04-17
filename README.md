@@ -612,6 +612,12 @@ src/
       neo4j.ts                     → neo4j-driver
       clickhouse.ts                → @clickhouse/client
 
+  licensing/
+    public-key.ts                  → Bundled ECDSA public keys (keyed by kid)
+    license-validator.ts           → JWT ES256 signature + expiry validation
+    clock-guard.ts                 → Monotonic clock-rollback detection (enterprise)
+    expiry-signal.ts               → Writes expiry notice to cwd / tmpdir / homedir
+
   sanitization/
     ast-sanitizer.ts               → SQL AST scrubbing (node-sql-parser)
     entropy-checker.ts             → Shannon entropy secret detection
