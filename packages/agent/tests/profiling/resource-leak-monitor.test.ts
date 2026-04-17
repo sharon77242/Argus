@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ResourceLeakMonitor } from '../../src/profiling/resource-leak-monitor.ts';
+import { ResourceLeakMonitor, type ResourceLeakEvent } from '../../src/profiling/resource-leak-monitor.ts';
 
 describe('ResourceLeakMonitor', () => {
   it('should emit an anomaly if handle threshold is breached', async () => {
@@ -9,7 +9,7 @@ describe('ResourceLeakMonitor', () => {
 
     // Use a very low threshold to guarantee a trigger
     const monitor = new ResourceLeakMonitor({ handleThreshold: 1, intervalMs: 10 });
-    let leakSpotted: any = null;
+    let leakSpotted: ResourceLeakEvent | null = null;
 
     monitor.on('leak', (event) => {
       leakSpotted = event;

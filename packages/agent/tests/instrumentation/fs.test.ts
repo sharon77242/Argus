@@ -2,12 +2,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { FsInstrumentation } from '../../src/instrumentation/fs.ts';
+import { FsInstrumentation, type TracedFsOperation } from '../../src/instrumentation/fs.ts';
 
 describe('FsInstrumentation', () => {
   it('should trace synchronous file operations', () => {
     const instrumentation = new FsInstrumentation(() => 'test.ts:1');
-    let capturedOp: any = null;
+    let capturedOp: TracedFsOperation | null = null;
 
     instrumentation.on('fs', (op) => {
       capturedOp = op;

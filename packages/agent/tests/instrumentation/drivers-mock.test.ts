@@ -19,6 +19,7 @@ import {
   activePatches,
   AUTO_PATCH_CHANNEL,
   PATCHED_SYMBOL,
+  type PatchedQueryMessage,
 } from '../../src/instrumentation/drivers/patch-utils.ts';
 
 // ── Shared cleanup ─────────────────────────────────────────────────────────
@@ -30,11 +31,11 @@ afterEach(() => {
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function collectMessages(fn: () => void | Promise<void>): Promise<any[]> {
+function collectMessages(fn: () => void | Promise<void>): Promise<PatchedQueryMessage[]> {
   return new Promise(async (resolve) => {
     const ch = diagnostics_channel.channel(AUTO_PATCH_CHANNEL);
-    const messages: any[] = [];
-    const listener = (msg: any) => messages.push(msg);
+    const messages: PatchedQueryMessage[] = [];
+    const listener = (msg: PatchedQueryMessage) => messages.push(msg);
     ch.subscribe(listener);
     try {
       await fn();

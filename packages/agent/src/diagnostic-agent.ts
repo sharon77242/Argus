@@ -530,7 +530,10 @@ export class DiagnosticAgent extends EventEmitter {
   /** Steps 11–12 — Crash guard and resource-leak monitor. */
   private wireGuards(): void {
     if (this.crashGuardEnabled) {
-      this.crashGuard = new CrashGuard((stack) => stack);
+      this.crashGuard = new CrashGuard(
+        (stack) => stack,
+        () => this.stop(), // flush telemetry before process.exit(1)
+      );
       this.crashGuard.on('crash', (event) => this.emit('crash', event));
       this.crashGuard.enable();
     }

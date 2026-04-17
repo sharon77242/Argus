@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import cp from 'node:child_process';
 import { AuditScanner } from '../../src/analysis/audit-scanner.ts';
+import type { ScanResult } from '../../src/analysis/types.ts';
 
 describe('AuditScanner (coverage)', () => {
 
@@ -58,7 +59,7 @@ describe('AuditScanner (coverage)', () => {
       cb(null, mockAuditOutput, '');
     };
 
-    let emitted: any = null;
+    let emitted: ScanResult | null = null;
     scanner.on('scan', (r) => { emitted = r; });
 
     try {

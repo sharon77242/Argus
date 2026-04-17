@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { CrashGuard } from '../../src/profiling/crash-guard.ts';
+import { CrashGuard, type CrashEvent } from '../../src/profiling/crash-guard.ts';
 
 describe('CrashGuard', () => {
   it('should intercept uncaught exceptions and emit suggestions', () => {
@@ -8,7 +8,7 @@ describe('CrashGuard', () => {
     
     const guard = new CrashGuard((stack) => stack.toUpperCase()); // mock resolver
     
-    let crashEmitted: any = null;
+    let crashEmitted: CrashEvent | null = null;
     guard.on('crash', (event) => { crashEmitted = event; });
     
     // Set active explicitly to avoid touching process.on

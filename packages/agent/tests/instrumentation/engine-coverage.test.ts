@@ -6,7 +6,7 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import diagnostics_channel from 'node:diagnostics_channel';
-import { InstrumentationEngine } from '../../src/instrumentation/engine.ts';
+import { InstrumentationEngine, type TracedQuery } from '../../src/instrumentation/engine.ts';
 
 describe('InstrumentationEngine (coverage)', () => {
   let engine: InstrumentationEngine | undefined;
@@ -21,15 +21,15 @@ describe('InstrumentationEngine (coverage)', () => {
     engine = new InstrumentationEngine({ channels: [customChannel] });
     engine.enable();
 
-    const queryPromise = new Promise<any>(resolve => {
+    const queryPromise = new Promise<TracedQuery>(resolve => {
       engine!.once('query', resolve);
     });
 
     const ch = diagnostics_channel.channel(customChannel);
     ch.publish({ query: 'SELECT 1', durationMs: 5 });
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 1000));
-    const event = await Promise.race([queryPromise, timeout]) as any;
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 1000));
+    const event = await Promise.race([queryPromise, timeout]);
 
     assert.strictEqual(event.sanitizedQuery, 'SELECT ?');
     assert.strictEqual(event.durationMs, 5);
@@ -49,7 +49,7 @@ describe('InstrumentationEngine (coverage)', () => {
   it('should emit a [FAILED] query and re-throw when the wrapped function throws', async () => {
     engine = new InstrumentationEngine();
 
-    const events: any[] = [];
+    const events: TracedQuery[] = [];
     engine.on('query', (e) => events.push(e));
 
     await assert.rejects(
@@ -69,7 +69,7 @@ describe('InstrumentationEngine (coverage)', () => {
     engine = new InstrumentationEngine();
     engine.enable();
 
-    const events: any[] = [];
+    const events: TracedQuery[] = [];
     engine.on('query', (e) => events.push(e));
 
     const ch = diagnostics_channel.channel('db.query.execution');

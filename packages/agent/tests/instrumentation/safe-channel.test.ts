@@ -6,7 +6,8 @@ import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { getDiagnosticsChannel, safeChannel, supportsHttpDiagnosticsChannel } from '../../src/instrumentation/safe-channel.ts';
-import { HttpInstrumentation } from '../../src/instrumentation/http.ts';
+import { HttpInstrumentation, type TracedHttpRequest } from '../../src/instrumentation/http.ts';
+import { type AddressInfo } from 'node:net';
 
 // ── safe-channel utility ───────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ describe('HttpInstrumentation — monkey-patch fallback (simulated Node < 18)', 
     }
 
     instrumentation = new MonkeyPatchHttp(() => 'test.ts:1');
-    const traced: any[] = [];
+    const traced: TracedHttpRequest[] = [];
     instrumentation.on('request', (r) => traced.push(r));
 
     // Start a local server
@@ -87,7 +88,7 @@ describe('HttpInstrumentation — monkey-patch fallback (simulated Node < 18)', 
       res.end('ok');
     });
     await new Promise<void>((resolve) => server.listen(0, resolve));
-    const port = (server.address() as any).port;
+    const port = (server.address() as AddressInfo).port;
 
     instrumentation.enable();
 
@@ -143,12 +144,12 @@ describe('HttpInstrumentation — monkey-patch fallback (simulated Node < 18)', 
     }
 
     instrumentation = new MonkeyPatchHttp(() => undefined);
-    const traced: any[] = [];
+    const traced: TracedHttpRequest[] = [];
     instrumentation.on('request', (r) => traced.push(r));
 
     const server = http.createServer((_req, res) => { res.writeHead(204); res.end(); });
     await new Promise<void>((resolve) => server.listen(0, resolve));
-    const port = (server.address() as any).port;
+    const port = (server.address() as AddressInfo).port;
 
     instrumentation.enable();
     const req = http.request({ host: 'localhost', port, path: '/opts-path', method: 'POST' }, (res) => res.resume());

@@ -8,7 +8,7 @@
 import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { RuntimeMonitor } from '../../src/profiling/runtime-monitor.ts';
+import { RuntimeMonitor, type ProfilerEvent } from '../../src/profiling/runtime-monitor.ts';
 
 const _sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -26,16 +26,21 @@ describe('RuntimeMonitor (coverage)', () => {
       memoryGrowthThresholdBytes: 1, // trigger on any growth
     });
 
-    // Set baseline to 0 so current heap usage always exceeds threshold
+    // Set baselines to 0 so every tick shows positive growth above threshold.
+    // The accumulated model requires GROWTH_TICKS_REQUIRED (3) consecutive
+    // positive-growth ticks with total growth > threshold before firing.
     (monitor as any).lastMemoryUsage = 0;
+    (monitor as any).baselineMemoryUsage = 0;
 
     const anomalyPromise = once(monitor, 'anomaly');
 
-    // Call checkThresholds directly to exercise the memory-leak code path
-    (monitor as any).checkThresholds().catch(() => {});
+    // Drive 3 consecutive above-threshold ticks to satisfy the accumulation guard.
+    for (let i = 0; i < 3; i++) {
+      await (monitor as any).checkThresholds().catch(() => {});
+    }
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
-    const [event] = (await Promise.race([anomalyPromise, timeout])) as any;
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+    const [event] = await Promise.race([anomalyPromise, timeout]);
 
     assert.strictEqual(event.type, 'memory-leak');
     assert.ok(event.growthBytes > 0);
@@ -53,7 +58,7 @@ describe('RuntimeMonitor (coverage)', () => {
     (monitor as any).isProfiling = true;
     (monitor as any).lastCpuProfileTime = 0; // not in cooldown
 
-    const events: any[] = [];
+    const events: ProfilerEvent[] = [];
     monitor.on('anomaly', (e) => events.push(e));
 
     await (monitor as any).handleEventLoopLag(100);
@@ -76,7 +81,7 @@ describe('RuntimeMonitor (coverage)', () => {
     // Set lastCpuProfileTime to "now" to simulate being inside cooldown
     (monitor as any).lastCpuProfileTime = Date.now();
 
-    const anomalyPromise = new Promise<any>(resolve => {
+    const anomalyPromise = new Promise<ProfilerEvent>(resolve => {
       monitor!.on('anomaly', (e) => {
         if (e.type === 'event-loop-lag') resolve(e);
       });
@@ -86,8 +91,8 @@ describe('RuntimeMonitor (coverage)', () => {
     const start = Date.now();
     while (Date.now() - start < 100) { /* busy */ }
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
-    const event = await Promise.race([anomalyPromise, timeout]) as any;
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+    const event = await Promise.race([anomalyPromise, timeout]);
 
     assert.strictEqual(event.type, 'event-loop-lag');
     assert.ok(!event.profileDataPath, 'Should NOT have a profileDataPath when in cooldown');
@@ -208,18 +213,18 @@ describe('RuntimeMonitor (coverage)', () => {
     (monitor as any).isProfiling = false;
     (monitor as any).lastCpuProfileTime = 0;
 
-    const anomalyPromise = new Promise<any>(resolve => {
+    const anomalyPromise = new Promise<ProfilerEvent>(resolve => {
       monitor!.on('anomaly', resolve);
     });
-    const errorPromise = new Promise<any>(resolve => {
+    const errorPromise = new Promise<Error>(resolve => {
       monitor!.on('error', resolve);
     });
 
     (monitor as any).handleEventLoopLag(200);
 
-    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000));
+    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000));
     // Either anomaly (with profile) or error is emitted
-    const result = await Promise.race([anomalyPromise, errorPromise, timeout]) as any;
+    const result = await Promise.race([anomalyPromise, errorPromise, timeout]);
 
     // The event was emitted — either a profile was captured or an error occurred
     assert.ok(result !== undefined, 'Should have emitted anomaly or error');
@@ -280,10 +285,10 @@ describe('RuntimeMonitor (coverage)', () => {
     };
 
     monitor = new FailingMonitor({ checkIntervalMs: 999999 });
-    const events: any[] = [];
-    const errors: any[] = [];
+    const events: ProfilerEvent[] = [];
+    const errors: Error[] = [];
     monitor.on('anomaly', (e) => events.push(e));
-    monitor.on('error', (e) => errors.push(e));
+    monitor.on('error', (e: Error) => errors.push(e));
 
     await (monitor as any).checkThresholds_simulateFailedSnapshot();
 
@@ -319,7 +324,7 @@ describe('RuntimeMonitor (coverage)', () => {
     };
 
     monitor = new SucceedingMonitor({ checkIntervalMs: 999999 });
-    const events: any[] = [];
+    const events: ProfilerEvent[] = [];
     monitor.on('anomaly', (e) => events.push(e));
 
     await (monitor as any).checkThresholds_simulateSuccessfulSnapshot();

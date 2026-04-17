@@ -5,14 +5,14 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { CrashGuard } from '../../src/profiling/crash-guard.ts';
+import { CrashGuard, type CrashEvent } from '../../src/profiling/crash-guard.ts';
 
 describe('CrashGuard (coverage)', () => {
 
   it('should handle unhandledRejection with an Error object', async () => {
     process.env.NODE_ENV = 'test';
     const guard = new CrashGuard();
-    let event: any = null;
+    let event: CrashEvent | null = null;
     guard.on('crash', (e) => { event = e; });
 
     // Set active so handleCrash runs
@@ -30,7 +30,7 @@ describe('CrashGuard (coverage)', () => {
   it('should handle unhandledRejection with a non-Error reason', async () => {
     process.env.NODE_ENV = 'test';
     const guard = new CrashGuard();
-    let event: any = null;
+    let event: CrashEvent | null = null;
     guard.on('crash', (e) => { event = e; });
 
     (guard as any).active = true;
@@ -46,7 +46,7 @@ describe('CrashGuard (coverage)', () => {
 
   it('should no-op when handleCrash is called while inactive', () => {
     const guard = new CrashGuard();
-    let event: any = null;
+    let event: CrashEvent | null = null;
     guard.on('crash', (e) => { event = e; });
 
     // active = false (default)
@@ -98,7 +98,7 @@ describe('CrashGuard (coverage)', () => {
   it('should resolve stack via custom resolver', () => {
     process.env.NODE_ENV = 'test';
     const guard = new CrashGuard(stack => `RESOLVED:${stack}`);
-    let event: any = null;
+    let event: CrashEvent | null = null;
     guard.on('crash', (e) => { event = e; });
 
     (guard as any).active = true;
@@ -111,7 +111,7 @@ describe('CrashGuard (coverage)', () => {
   it('should produce undefined resolvedStack when error has no stack', () => {
     process.env.NODE_ENV = 'test';
     const guard = new CrashGuard();
-    let event: any = null;
+    let event: CrashEvent | null = null;
     guard.on('crash', (e) => { event = e; });
 
     (guard as any).active = true;
@@ -126,7 +126,7 @@ describe('CrashGuard (coverage)', () => {
   it('handleUncaughtException: should call handleCrash with the error', () => {
     process.env.NODE_ENV = 'test';
     const guard = new CrashGuard();
-    let event: any = null;
+    let event: CrashEvent | null = null;
     guard.on('crash', (e) => { event = e; });
 
     guard.enable(); // registers process listeners (sets active=true)
@@ -193,7 +193,7 @@ describe('CrashGuard (coverage)', () => {
   it('[BUG FIX] unhandledRejection should still emit crash event without killing process', () => {
     process.env.NODE_ENV = 'test';
     const guard = new CrashGuard();
-    let event: any = null;
+    let event: CrashEvent | null = null;
     guard.on('crash', (e) => { event = e; });
     (guard as any).active = true;
 

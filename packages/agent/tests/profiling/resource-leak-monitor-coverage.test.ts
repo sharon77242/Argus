@@ -5,7 +5,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ResourceLeakMonitor } from '../../src/profiling/resource-leak-monitor.ts';
+import { ResourceLeakMonitor, type ResourceLeakEvent } from '../../src/profiling/resource-leak-monitor.ts';
 
 describe('ResourceLeakMonitor (coverage)', () => {
 
@@ -19,7 +19,7 @@ describe('ResourceLeakMonitor (coverage)', () => {
       intervalMs: 10,
     });
 
-    const leaks: any[] = [];
+    const leaks: ResourceLeakEvent[] = [];
     monitor.on('leak', (e) => leaks.push(e));
 
     monitor.start();
@@ -65,7 +65,7 @@ describe('ResourceLeakMonitor (coverage)', () => {
       alertCooldownMs: 500,
     });
 
-    const leaks: any[] = [];
+    const leaks: ResourceLeakEvent[] = [];
     monitor.on('leak', (e) => leaks.push(e));
     monitor.start();
 
@@ -88,7 +88,7 @@ describe('ResourceLeakMonitor (coverage)', () => {
       alertCooldownMs: 50,
     });
 
-    const leaks: any[] = [];
+    const leaks: ResourceLeakEvent[] = [];
     monitor.on('leak', (e) => leaks.push(e));
     monitor.start();
 

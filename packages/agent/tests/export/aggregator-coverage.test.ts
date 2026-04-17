@@ -4,7 +4,7 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { MetricsAggregator } from '../../src/export/aggregator.ts';
+import { MetricsAggregator, type AggregatorEvent } from '../../src/export/aggregator.ts';
 
 describe('MetricsAggregator (coverage)', () => {
 
@@ -17,7 +17,7 @@ describe('MetricsAggregator (coverage)', () => {
       agg.record('latency', i, { dummy: true });
     }
 
-    const flushed: any[][] = [];
+    const flushed: AggregatorEvent[][] = [];
     agg.on('flush', (events) => flushed.push(events));
     agg.flush();
 
@@ -31,7 +31,7 @@ describe('MetricsAggregator (coverage)', () => {
     assert.ok(exported.length >= 2,
       `[BUG FIX] Should export ≥2 items (p99+p100), got ${exported.length}`);
 
-    const values = exported.map((e: any) => e.value).sort((a: number, b: number) => a - b);
+    const values = exported.map((e: AggregatorEvent) => e.value).sort((a: number, b: number) => a - b);
     assert.strictEqual(values[0], 99, 'Should include value 99 (true p99)');
     assert.strictEqual(values[values.length - 1], 100, 'Should include value 100 (p100/max)');
   });
@@ -41,11 +41,11 @@ describe('MetricsAggregator (coverage)', () => {
     for (let i = 1; i <= 10; i++) {
       agg.record('latency', i, {});
     }
-    const flushed: any[][] = [];
+    const flushed: AggregatorEvent[][] = [];
     agg.on('flush', (events) => flushed.push(events));
     agg.flush();
 
-    const values = flushed[0].map((e: any) => e.value).sort((a: number, b: number) => a - b);
+    const values = flushed[0].map((e: AggregatorEvent) => e.value).sort((a: number, b: number) => a - b);
     // ceil(0.99 * 10) - 1 = ceil(9.9) - 1 = 10 - 1 = 9 → items at index 9 (value 10)
     // Actually only 1 item gets exported here — the last one (value 10)
     assert.ok(values.includes(10), 'Should always include the maximum value');
@@ -57,7 +57,7 @@ describe('MetricsAggregator (coverage)', () => {
     for (let i = 1; i <= 5; i++) {
       agg.record('query', i * 10, {});
     }
-    const flushed: any[][] = [];
+    const flushed: AggregatorEvent[][] = [];
     agg.on('flush', (events) => flushed.push(events));
     agg.flush();
 
@@ -72,12 +72,12 @@ describe('MetricsAggregator (coverage)', () => {
     for (let i = 1; i <= 6; i++) agg.record('http', i, {});
     for (let i = 1; i <= 3; i++) agg.record('query', i * 10, {});
 
-    const flushed: any[][] = [];
+    const flushed: AggregatorEvent[][] = [];
     agg.on('flush', (events) => flushed.push(events));
     agg.flush();
 
-    const httpItems = flushed[0].filter((e: any) => e.metricName === 'http');
-    const queryItems = flushed[0].filter((e: any) => e.metricName === 'query');
+    const httpItems = flushed[0].filter((e: AggregatorEvent) => e.metricName === 'http');
+    const queryItems = flushed[0].filter((e: AggregatorEvent) => e.metricName === 'query');
 
     assert.ok(httpItems.length >= 1, 'Should have exported http items');
     assert.strictEqual(queryItems.length, 3, 'Should export all 3 query items (low-traffic)');
@@ -98,7 +98,7 @@ describe('MetricsAggregator (coverage)', () => {
     agg.enable();
     agg.record('metric', 1, {});
 
-    const flushed: any[][] = [];
+    const flushed: AggregatorEvent[][] = [];
     agg.on('flush', (events) => flushed.push(events));
 
     agg.disable();

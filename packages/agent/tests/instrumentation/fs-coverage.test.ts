@@ -8,14 +8,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { FsInstrumentation } from '../../src/instrumentation/fs.ts';
+import { FsInstrumentation, type TracedFsOperation } from '../../src/instrumentation/fs.ts';
 
 describe('FsInstrumentation (coverage)', () => {
 
   // ── Async callback-style fs operation ─────────────────────────────────────
   it('should trace async (callback-style) file writes', (_, done) => {
     const instr = new FsInstrumentation(() => 'source.ts:1');
-    const events: any[] = [];
+    const events: TracedFsOperation[] = [];
     instr.on('fs', (op) => events.push(op));
     instr.enable();
 
@@ -65,7 +65,7 @@ describe('FsInstrumentation (coverage)', () => {
   // ── args[0] is a non-string (e.g., Buffer path) ──────────────────────────
   it('should handle non-string path arguments gracefully', (_, done) => {
     const instr = new FsInstrumentation(() => undefined);
-    const events: any[] = [];
+    const events: TracedFsOperation[] = [];
     instr.on('fs', (op) => events.push(op));
     instr.enable();
 

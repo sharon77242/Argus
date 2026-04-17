@@ -5,14 +5,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { HttpInstrumentation } from '../../src/instrumentation/http.ts';
+import { HttpInstrumentation, type TracedHttpRequest } from '../../src/instrumentation/http.ts';
 
 describe('HttpInstrumentation (coverage)', () => {
 
   // ── Request error event path ──────────────────────────────────────────────
   it('should emit request event with error when HTTP request fails', async () => {
     const instr = new HttpInstrumentation(() => undefined);
-    const events: any[] = [];
+    const events: TracedHttpRequest[] = [];
     instr.on('request', (req) => events.push(req));
     instr.enable();
 

@@ -1,11 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { LoggerInstrumentation } from '../../src/instrumentation/logger.ts';
+import { LoggerInstrumentation, type TracedLog } from '../../src/instrumentation/logger.ts';
 
 describe('LoggerInstrumentation', () => {
   it('should trace console logs and apply entropy scrubbing', () => {
     const instrumentation = new LoggerInstrumentation(() => 'test.ts:1', { scrubContext: true, entropyThreshold: 2.0 });
-    let capturedLog: any = null;
+    let capturedLog: TracedLog | null = null;
 
     instrumentation.on('log', (log) => {
       capturedLog = log;
@@ -33,7 +33,7 @@ describe('LoggerInstrumentation', () => {
 
   it('should pass log structures to the analyzer', () => {
     const instrumentation = new LoggerInstrumentation(() => 'test.ts:1');
-    let capturedLog: any = null;
+    let capturedLog: TracedLog | null = null;
 
     instrumentation.on('log', (log) => {
       capturedLog = log;

@@ -38,8 +38,10 @@ export class RuntimeMonitor extends EventEmitter {
 
   private lastCpuProfileTime = 0;
   private lastMemoryUsage = 0;
+  private baselineMemoryUsage = 0;
   private consecutiveGrowthTicks = 0;
-  // Require N consecutive above-threshold ticks before firing to suppress single-tick bursts.
+  // Require N consecutive positive-growth ticks with total accumulated growth
+  // exceeding the threshold before firing — catches both spike and slow-burn leaks.
   private static readonly GROWTH_TICKS_REQUIRED = 3;
 
   private inspectorSession: Session | null = null;
@@ -73,6 +75,7 @@ export class RuntimeMonitor extends EventEmitter {
     if (this.intervalTimer) return;
 
     this.lastMemoryUsage = process.memoryUsage().heapUsed;
+    this.baselineMemoryUsage = this.lastMemoryUsage;
     this.intervalTimer = setInterval(() => {
       this.checkThresholds().catch((err) => this.emit("error", err));
     }, this.options.checkIntervalMs);
@@ -101,13 +104,22 @@ export class RuntimeMonitor extends EventEmitter {
     }
 
     // 2. Memory Growth Detection
+    // Uses an accumulated-growth model to catch both sudden spikes and slow-burn leaks:
+    //   - Count every tick where memory increases (growth > 0).
+    //   - Fire when N consecutive growth ticks have accumulated total growth ≥ threshold.
+    //   - Only reset the streak (and baseline) when memory genuinely decreases (GC ran).
     const currentMemory = process.memoryUsage().heapUsed;
     const growth = currentMemory - this.lastMemoryUsage;
+    const totalGrowth = currentMemory - this.baselineMemoryUsage;
 
-    if (growth > this.options.memoryGrowthThresholdBytes!) {
+    if (growth > 0) {
       this.consecutiveGrowthTicks++;
-      if (this.consecutiveGrowthTicks >= RuntimeMonitor.GROWTH_TICKS_REQUIRED) {
+      if (
+        this.consecutiveGrowthTicks >= RuntimeMonitor.GROWTH_TICKS_REQUIRED &&
+        totalGrowth > this.options.memoryGrowthThresholdBytes!
+      ) {
         this.consecutiveGrowthTicks = 0;
+        this.baselineMemoryUsage = currentMemory; // reset so the same leak doesn't fire repeatedly
         const snapPath = join(tmpdir(), `heap-snapshot-${Date.now()}.heapsnapshot`);
         let heapSnapshotPath: string | undefined;
         try {
@@ -126,15 +138,17 @@ export class RuntimeMonitor extends EventEmitter {
 
         this.emit("anomaly", {
           type: "memory-leak",
-          growthBytes: growth,
+          growthBytes: totalGrowth,
           heapSnapshotPath,
           timestamp: Date.now(),
         } satisfies ProfilerEvent);
       }
     } else {
+      // Memory decreased — GC cleaned up; reset streak and new baseline.
       this.consecutiveGrowthTicks = 0;
+      this.baselineMemoryUsage = currentMemory;
     }
-    this.lastMemoryUsage = currentMemory; // Update baseline
+    this.lastMemoryUsage = currentMemory; // Track per-tick delta
   }
 
   private async handleEventLoopLag(lagMs: number): Promise<void> {
