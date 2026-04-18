@@ -15,6 +15,7 @@ import { OTLPExporter, type ExporterConfig } from "./export/exporter.ts";
 import { EntropyChecker } from "./sanitization/entropy-checker.ts";
 import { applyDriverPatches, removeDriverPatches } from "./instrumentation/drivers/index.ts";
 import { QueryAnalyzer, type QueryAnalyzerOptions } from "./analysis/query-analyzer.ts";
+import { SlowQueryMonitor, type SlowQueryOptions, type SlowQueryRecord } from "./analysis/slow-query-monitor.ts";
 import { StaticScanner } from "./analysis/static-scanner.ts";
 import { HttpInstrumentation } from "./instrumentation/http.ts";
 import { FsInstrumentation } from "./instrumentation/fs.ts";
@@ -49,6 +50,8 @@ export interface AgentProfileConfig {
   workspaceDir?: string;
   /** Options forwarded to QueryAnalyzer when query analysis is enabled. */
   queryAnalysis?: QueryAnalyzerOptions;
+  /** Options forwarded to SlowQueryMonitor when slow query monitoring is enabled. */
+  slowQueries?: SlowQueryOptions;
 }
 
 /**
@@ -83,6 +86,7 @@ export class DiagnosticAgent extends EventEmitter {
   private aggregatorWindowMs = 60_000;
   private entropyThreshold = 4.0;
   private queryAnalysisOptions: QueryAnalyzerOptions | null = null;
+  private slowQueryOptions: SlowQueryOptions | null = null;
   private staticScanDir: string | null = null;
   private httpTracingEnabled = false;
   private fsTracingEnabled = false;
@@ -99,6 +103,7 @@ export class DiagnosticAgent extends EventEmitter {
   private aggregator: MetricsAggregator | null = null;
   private exporter: OTLPExporter | null = null;
   private queryAnalyzer: QueryAnalyzer | null = null;
+  private slowQueryMonitor: SlowQueryMonitor | null = null;
   private httpTracker: HttpInstrumentation | null = null;
   private fsTracker: FsInstrumentation | null = null;
   private logTracker: LoggerInstrumentation | null = null;
@@ -209,6 +214,7 @@ export class DiagnosticAgent extends EventEmitter {
           break;
         case "db":
           agent.withQueryAnalysis(config.queryAnalysis ?? {});
+          agent.withSlowQueryMonitor(config.slowQueries ?? {});
           agent.withInstrumentation({ autoPatching: true });
           agent.withResourceLeakMonitor(); // Catch Db connection leaks
           break;
@@ -285,6 +291,25 @@ export class DiagnosticAgent extends EventEmitter {
    */
   public withQueryAnalysis(options: QueryAnalyzerOptions = {}): this {
     this.queryAnalysisOptions = options;
+    return this;
+  }
+
+  /**
+   * Enable slow query monitoring. Queries that exceed their driver's threshold
+   * are emitted as `'slow-query'` events and stored in a top-5 log accessible
+   * via `agent.getSlowQueries()` / `agent.getSlowestQuery()`.
+   *
+   * Per-driver thresholds can be set via options or env vars:
+   *   ARGUS_SLOW_QUERY_THRESHOLD_MS=1000       (global default)
+   *   ARGUS_SLOW_QUERY_THRESHOLD_PG=500
+   *   ARGUS_SLOW_QUERY_THRESHOLD_REDIS=50
+   *   ARGUS_SLOW_QUERY_THRESHOLD_MONGODB=200
+   *
+   * ✅ Prod Safe: Yes
+   * 📊 Resource Impact: Very Low
+   */
+  public withSlowQueryMonitor(options: SlowQueryOptions = {}): this {
+    this.slowQueryOptions = options;
     return this;
   }
 
@@ -513,10 +538,14 @@ export class DiagnosticAgent extends EventEmitter {
     this.monitor.start();
   }
 
-  /** Steps 5–5b — Instrumentation engine + query analyzer. */
+  /** Steps 5–5b — Instrumentation engine + query analyzer + slow query monitor. */
   private wireInstrumentationEngine(): void {
     if (this.queryAnalysisOptions !== null) {
       this.queryAnalyzer = new QueryAnalyzer(this.queryAnalysisOptions);
+    }
+
+    if (this.slowQueryOptions !== null) {
+      this.slowQueryMonitor = new SlowQueryMonitor(this.slowQueryOptions);
     }
 
     if (!this.instrumentationOptions) return;
@@ -532,6 +561,22 @@ export class DiagnosticAgent extends EventEmitter {
       const enriched = this.queryAnalyzer
         ? { ...traced, suggestions: this.queryAnalyzer.analyze(traced.sanitizedQuery) }
         : traced;
+
+      if (this.slowQueryMonitor) {
+        const slow = this.slowQueryMonitor.check(
+          traced.sanitizedQuery,
+          traced.durationMs,
+          traced.driver ?? "unknown",
+          traced.timestamp,
+          traced.sourceLine,
+          traced.correlationId,
+        );
+        if (slow) {
+          aggregator.record("slow-query", slow.durationMs, slow as unknown as Record<string, unknown>);
+          this.emit("slow-query", slow);
+        }
+      }
+
       aggregator.record("query", traced.durationMs, enriched as Record<string, unknown>);
       this.emit("query", enriched);
     });
@@ -639,6 +684,7 @@ export class DiagnosticAgent extends EventEmitter {
     this.crashGuard = null;
     this.leakMonitor = null;
     this.queryAnalyzer = null;
+    this.slowQueryMonitor = null;
 
     // Remove debug console listeners added by useConsoleLogger (if any).
     for (const [event, fn] of this.debugListeners) {
@@ -688,6 +734,10 @@ export class DiagnosticAgent extends EventEmitter {
       if (ev.scrubbed)
         console.warn(`${prefix} SCRUB   console.${ev.level} contained secrets — redacted`);
     });
+    add("slow-query", (s) => {
+      const ev = s as SlowQueryRecord;
+      console.warn(`${prefix} SLOW    [${ev.durationMs.toFixed(1)}ms > ${ev.thresholdMs}ms] driver=${ev.driver} — ${ev.sanitizedQuery}`);
+    });
 
     if (level === "verbose") {
       add("query", (q) => {
@@ -718,6 +768,28 @@ export class DiagnosticAgent extends EventEmitter {
   /** Returns `true` if the agent has been started and not yet stopped. */
   public get isRunning(): boolean {
     return this.running;
+  }
+
+  /**
+   * Returns the top-N slowest queries recorded since the agent started (or last `clearSlowQueries()` call),
+   * sorted slowest first. Returns an empty array if slow query monitoring is not enabled.
+   */
+  public getSlowQueries(): SlowQueryRecord[] {
+    return this.slowQueryMonitor?.getSlowQueries() ?? [];
+  }
+
+  /**
+   * Returns the single slowest query recorded, or undefined if none yet (or monitoring disabled).
+   */
+  public getSlowestQuery(): SlowQueryRecord | undefined {
+    return this.slowQueryMonitor?.getSlowest();
+  }
+
+  /**
+   * Clears the slow query log. Useful at the start of a request or test scenario.
+   */
+  public clearSlowQueries(): void {
+    this.slowQueryMonitor?.clear();
   }
 
   /**

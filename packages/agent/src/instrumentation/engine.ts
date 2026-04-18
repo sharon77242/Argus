@@ -6,6 +6,8 @@ import { getCurrentContext } from "./correlation.ts";
 export interface TracedQuery {
   sanitizedQuery: string;
   durationMs: number;
+  /** Driver name as reported by the patch (e.g. 'pg', 'redis', 'mongodb'). Absent for manual traceQuery() calls. */
+  driver?: string;
   sourceLine?: string;
   timestamp: number;
   correlationId?: string;
@@ -47,7 +49,8 @@ export class InstrumentationEngine extends EventEmitter {
       const msg = message as Record<string, unknown>;
       if (typeof msg.query === "string") {
         const duration = typeof msg.durationMs === "number" ? msg.durationMs : 0;
-        this.emit("query", this.processQueryDetails(msg.query, duration));
+        const driver = typeof msg.driver === "string" ? msg.driver : undefined;
+        this.emit("query", this.processQueryDetails(msg.query, duration, driver));
       }
     });
   }
@@ -98,10 +101,11 @@ export class InstrumentationEngine extends EventEmitter {
     }
   }
 
-  public processQueryDetails(rawQuery: string, durationMs: number): TracedQuery {
+  public processQueryDetails(rawQuery: string, durationMs: number, driver?: string): TracedQuery {
     return {
       sanitizedQuery: this.sanitizeQuery(rawQuery),
       durationMs,
+      driver,
       sourceLine: this.extractSourceLine(),
       timestamp: Date.now(),
       correlationId: getCurrentContext()?.requestId,

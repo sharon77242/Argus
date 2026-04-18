@@ -696,7 +696,17 @@ const suggestions = cbd.analyze(recentQueryEvents);
 
 ## Self-Host Your OTLP Endpoint
 
-The agent exports standard OTLP JSON — any compatible collector works. Below is the quickest local setup using Jaeger's all-in-one image.
+> [!IMPORTANT]
+> **OTLP export requires a paid Self-Hosted Pro or Enterprise license.**
+> In free mode the agent emits events locally via `EventEmitter` only — `.withExporter()` has no effect without a valid `DIAGNOSTIC_LICENSE_KEY`.
+> To get notified when Self-Hosted Pro licenses go on sale: open [this GitHub issue](https://github.com/YOUR_ORG/YOUR_REPO/issues/YOUR_ISSUE) or email [sharon10vp614@gmail.com](mailto:sharon10vp614@gmail.com).
+
+The Self-Hosted Pro tier exports standard OTLP JSON directly to your own collector — no data ever leaves your infrastructure. Any OTLP-compatible collector works. Below is the quickest local setup using Jaeger's all-in-one image.
+
+```bash
+# Set your license key (Self-Hosted Pro or Enterprise)
+export DIAGNOSTIC_LICENSE_KEY="your-license-key"
+```
 
 ### Jaeger (quickest local setup)
 
@@ -745,7 +755,7 @@ Local suggestions fire today with zero account required.
 A hosted dashboard with 30-day query history, AI-powered fix suggestions,
 and cross-service correlation is in development.
 
-→ [Join the waitlist](https://argus.dev/waitlist) to be notified at launch.
+→ Subscribe via [this GitHub issue](https://github.com/YOUR_ORG/YOUR_REPO/issues/YOUR_ISSUE) or email [sharon10vp614@gmail.com](mailto:sharon10vp614@gmail.com) to be notified at launch.
 
 ---
 
