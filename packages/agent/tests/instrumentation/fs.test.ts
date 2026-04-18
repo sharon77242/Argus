@@ -1,36 +1,36 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { FsInstrumentation, type TracedFsOperation } from '../../src/instrumentation/fs.ts';
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { FsInstrumentation, type TracedFsOperation } from "../../src/instrumentation/fs.ts";
 
-describe('FsInstrumentation', () => {
-  it('should trace synchronous file operations', () => {
-    const instrumentation = new FsInstrumentation(() => 'test.ts:1');
-    let capturedOp: TracedFsOperation | null = null;
+describe("FsInstrumentation", () => {
+  it("should trace synchronous file operations", () => {
+    const instrumentation = new FsInstrumentation(() => "test.ts:1");
+    const ops: TracedFsOperation[] = [];
 
-    instrumentation.on('fs', (op) => {
-      capturedOp = op;
+    instrumentation.on("fs", (op: TracedFsOperation) => {
+      ops.push(op);
     });
 
     instrumentation.enable();
 
     // Perform an operation that should be caught
-    const tmpFile = path.join(process.cwd(), 'temp-fs-test.txt');
+    const tmpFile = path.join(process.cwd(), "temp-fs-test.txt");
     try {
-      fs.writeFileSync(tmpFile, 'hello');
-      
-      assert.ok(capturedOp, 'Should have captured writeFileSync');
-      assert.strictEqual(capturedOp.method, 'writeFileSync');
+      fs.writeFileSync(tmpFile, "hello");
+
+      assert.ok(ops.length > 0, "Should have captured writeFileSync");
+      assert.strictEqual(ops[0].method, "writeFileSync");
       // Should have generated a critical suggestion because it's synchronous
-      assert.ok(capturedOp.suggestions);
-      assert.strictEqual(capturedOp.suggestions[0].rule, 'synchronous-fs');
+      assert.ok(ops[0].suggestions);
+      assert.strictEqual(ops[0].suggestions[0].rule, "synchronous-fs");
 
       // Do a read
-      capturedOp = null;
+      ops.length = 0;
       fs.readFileSync(tmpFile);
-      assert.ok(capturedOp, 'Should have captured readFileSync');
-      assert.strictEqual(capturedOp.method, 'readFileSync');
+      assert.ok(ops.length > 0, "Should have captured readFileSync");
+      assert.strictEqual(ops[0].method, "readFileSync");
     } finally {
       instrumentation.disable();
       if (fs.existsSync(tmpFile)) {
@@ -39,7 +39,7 @@ describe('FsInstrumentation', () => {
     }
   });
 
-  it('should restore prototypes on disable', () => {
+  it("should restore prototypes on disable", () => {
     const instrumentation = new FsInstrumentation(() => undefined);
     const originalWrite = fs.writeFileSync;
     instrumentation.enable();

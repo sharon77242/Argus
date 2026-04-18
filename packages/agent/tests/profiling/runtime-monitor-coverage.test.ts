@@ -5,14 +5,14 @@
  *          captureCpuProfile with null inspectorSession (lines 167-172),
  *          handleEventLoopLag isProfiling guard (line 137)
  */
-import { describe, it, afterEach } from 'node:test';
-import assert from 'node:assert/strict';
-import { once } from 'node:events';
-import { RuntimeMonitor, type ProfilerEvent } from '../../src/profiling/runtime-monitor.ts';
+import { describe, it, afterEach } from "node:test";
+import assert from "node:assert/strict";
+import { once } from "node:events";
+import { RuntimeMonitor, type ProfilerEvent } from "../../src/profiling/runtime-monitor.ts";
 
 const _sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-describe('RuntimeMonitor (coverage)', () => {
+describe("RuntimeMonitor (coverage)", () => {
   let monitor: RuntimeMonitor | undefined;
 
   afterEach(() => {
@@ -20,34 +20,39 @@ describe('RuntimeMonitor (coverage)', () => {
   });
 
   // ── Error from checkThresholds: memory-leak anomaly via direct call ───────
-  it('should emit memory-leak anomaly when calling checkThresholds directly', async () => {
+  it("should emit memory-leak anomaly when calling checkThresholds directly", async () => {
     monitor = new RuntimeMonitor({
       checkIntervalMs: 999999, // don't auto-fire the interval
       memoryGrowthThresholdBytes: 1, // trigger on any growth
     });
 
-    // Set baselines to 0 so every tick shows positive growth above threshold.
-    // The accumulated model requires GROWTH_TICKS_REQUIRED (3) consecutive
-    // positive-growth ticks with total growth > threshold before firing.
-    (monitor as any).lastMemoryUsage = 0;
+    // Reset baseline to 0 before each tick so every tick sees positive growth.
+    // checkThresholds() writes lastMemoryUsage = currentMemory at the end of
+    // each call, so without re-zeroing it the second tick sees 0 growth and
+    // resets the streak counter. baselineMemoryUsage stays 0 so totalGrowth
+    // always exceeds the 1-byte threshold.
     (monitor as any).baselineMemoryUsage = 0;
 
-    const anomalyPromise = once(monitor, 'anomaly');
+    const anomalyPromise = once(monitor, "anomaly");
 
     // Drive 3 consecutive above-threshold ticks to satisfy the accumulation guard.
+    // GROWTH_TICKS_REQUIRED = 3.
     for (let i = 0; i < 3; i++) {
+      (monitor as any).lastMemoryUsage = 0; // force positive growth every tick
       await (monitor as any).checkThresholds().catch(() => {});
     }
 
-    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+    const timeout = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error("timeout")), 3000),
+    );
     const [event] = await Promise.race([anomalyPromise, timeout]);
 
-    assert.strictEqual(event.type, 'memory-leak');
+    assert.strictEqual(event.type, "memory-leak");
     assert.ok(event.growthBytes > 0);
   });
 
   // ── isProfiling guard: concurrent calls should be no-ops ─────────────────
-  it('should skip profiling when already profiling (isProfiling guard)', async () => {
+  it("should skip profiling when already profiling (isProfiling guard)", async () => {
     monitor = new RuntimeMonitor({
       checkIntervalMs: 999999,
       eventLoopThresholdMs: 1,
@@ -59,19 +64,19 @@ describe('RuntimeMonitor (coverage)', () => {
     (monitor as any).lastCpuProfileTime = 0; // not in cooldown
 
     const events: ProfilerEvent[] = [];
-    monitor.on('anomaly', (e) => events.push(e));
+    monitor.on("anomaly", (e) => events.push(e));
 
     await (monitor as any).handleEventLoopLag(100);
 
     // isProfiling was true, so the method should have returned early without emitting
-    assert.strictEqual(events.length, 0, 'Should not emit when already profiling');
+    assert.strictEqual(events.length, 0, "Should not emit when already profiling");
   });
 
   // ── handleEventLoopLag in cooldown (simple emission path) ─────────────────
-  it('should emit simple anomaly (no profile) when in CPU profile cooldown', async () => {
+  it("should emit simple anomaly (no profile) when in CPU profile cooldown", async () => {
     monitor = new RuntimeMonitor({
       checkIntervalMs: 50,
-      eventLoopThresholdMs: 1,     // trigger easily
+      eventLoopThresholdMs: 1, // trigger easily
       cpuProfileCooldownMs: 99999, // very long cooldown
       cpuProfileDurationMs: 50,
     });
@@ -81,25 +86,29 @@ describe('RuntimeMonitor (coverage)', () => {
     // Set lastCpuProfileTime to "now" to simulate being inside cooldown
     (monitor as any).lastCpuProfileTime = Date.now();
 
-    const anomalyPromise = new Promise<ProfilerEvent>(resolve => {
-      monitor!.on('anomaly', (e) => {
-        if (e.type === 'event-loop-lag') resolve(e);
+    const anomalyPromise = new Promise<ProfilerEvent>((resolve) => {
+      monitor!.on("anomaly", (e) => {
+        if (e.type === "event-loop-lag") resolve(e);
       });
     });
 
     // Block to trigger lag
     const start = Date.now();
-    while (Date.now() - start < 100) { /* busy */ }
+    while (Date.now() - start < 100) {
+      /* busy */
+    }
 
-    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+    const timeout = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error("timeout")), 3000),
+    );
     const event = await Promise.race([anomalyPromise, timeout]);
 
-    assert.strictEqual(event.type, 'event-loop-lag');
-    assert.ok(!event.profileDataPath, 'Should NOT have a profileDataPath when in cooldown');
+    assert.strictEqual(event.type, "event-loop-lag");
+    assert.ok(!event.profileDataPath, "Should NOT have a profileDataPath when in cooldown");
   });
 
   // ── captureCpuProfile: inspectorSession null guard (line 167) ─────────────
-  it('captureCpuProfile should resolve null when session is null', async () => {
+  it("captureCpuProfile should resolve null when session is null", async () => {
     monitor = new RuntimeMonitor();
     (monitor as any).inspectorSession = null;
     const result = await (monitor as any).captureCpuProfile();
@@ -107,7 +116,7 @@ describe('RuntimeMonitor (coverage)', () => {
   });
 
   // ── env-var-based config ───────────────────────────────────────────────────
-  it('should read configuration from environment variables', () => {
+  it("should read configuration from environment variables", () => {
     const orig = {
       RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS: process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS,
       RUNTIME_MONITOR_MEMORY_GROWTH_BYTES: process.env.RUNTIME_MONITOR_MEMORY_GROWTH_BYTES,
@@ -116,11 +125,11 @@ describe('RuntimeMonitor (coverage)', () => {
       RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS: process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS,
     };
 
-    process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS = '25';
-    process.env.RUNTIME_MONITOR_MEMORY_GROWTH_BYTES = '512';
-    process.env.RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS = '30000';
-    process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS = '200';
-    process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS = '100';
+    process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS = "25";
+    process.env.RUNTIME_MONITOR_MEMORY_GROWTH_BYTES = "512";
+    process.env.RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS = "30000";
+    process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS = "200";
+    process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS = "100";
 
     try {
       monitor = new RuntimeMonitor();
@@ -141,42 +150,51 @@ describe('RuntimeMonitor (coverage)', () => {
   });
 
   // ── safePositiveInt: NaN / negative / zero env-vars fall back to defaults ──
-  it('[FIX] safePositiveInt: NaN env-var should fall back to default', () => {
+  it("[FIX] safePositiveInt: NaN env-var should fall back to default", () => {
     const orig = process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS;
-    process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS = 'not-a-number';
+    process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS = "not-a-number";
     try {
       monitor = new RuntimeMonitor();
       const opts = (monitor as any).options;
-      assert.strictEqual(opts.checkIntervalMs, 1000,
-        'NaN env-var should fall back to default (1000)');
+      assert.strictEqual(
+        opts.checkIntervalMs,
+        1000,
+        "NaN env-var should fall back to default (1000)",
+      );
     } finally {
       if (orig === undefined) delete process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS;
       else process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS = orig;
     }
   });
 
-  it('[FIX] safePositiveInt: negative env-var should fall back to default', () => {
+  it("[FIX] safePositiveInt: negative env-var should fall back to default", () => {
     const orig = process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS;
-    process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS = '-100';
+    process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS = "-100";
     try {
       monitor = new RuntimeMonitor();
       const opts = (monitor as any).options;
-      assert.strictEqual(opts.eventLoopThresholdMs, 50,
-        'Negative env-var should fall back to default (50)');
+      assert.strictEqual(
+        opts.eventLoopThresholdMs,
+        50,
+        "Negative env-var should fall back to default (50)",
+      );
     } finally {
       if (orig === undefined) delete process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS;
       else process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS = orig;
     }
   });
 
-  it('[FIX] safePositiveInt: zero env-var should fall back to default', () => {
+  it("[FIX] safePositiveInt: zero env-var should fall back to default", () => {
     const orig = process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS;
-    process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS = '0';
+    process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS = "0";
     try {
       monitor = new RuntimeMonitor();
       const opts = (monitor as any).options;
-      assert.strictEqual(opts.cpuProfileDurationMs, 500,
-        'Zero env-var should fall back to default (500)');
+      assert.strictEqual(
+        opts.cpuProfileDurationMs,
+        500,
+        "Zero env-var should fall back to default (500)",
+      );
     } finally {
       if (orig === undefined) delete process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS;
       else process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS = orig;
@@ -184,25 +202,27 @@ describe('RuntimeMonitor (coverage)', () => {
   });
 
   // ── stop() when inspectorSession is active ────────────────────────────────
-  it('stop() should disconnect an active inspector session', () => {
+  it("stop() should disconnect an active inspector session", () => {
     monitor = new RuntimeMonitor({ checkIntervalMs: 9999 });
     monitor.start();
 
     // Inject a mock session
     const disconnected: boolean[] = [];
     (monitor as any).inspectorSession = {
-      disconnect: () => { disconnected.push(true); }
+      disconnect: () => {
+        disconnected.push(true);
+      },
     };
 
     monitor.stop();
-    assert.strictEqual(disconnected.length, 1, 'disconnect() should have been called');
+    assert.strictEqual(disconnected.length, 1, "disconnect() should have been called");
     assert.strictEqual((monitor as any).inspectorSession, null);
   });
 
   // ── handleEventLoopLag full path: lines 138-162 ───────────────────────────
   // Directly call handleEventLoopLag with no cooldown and no isProfiling to cover
   // the inspector session creation, captureCpuProfile, and anomaly emission paths.
-  it('should capture CPU profile and emit anomaly when handleEventLoopLag is called directly', async () => {
+  it("should capture CPU profile and emit anomaly when handleEventLoopLag is called directly", async () => {
     monitor = new RuntimeMonitor({
       checkIntervalMs: 999999,
       cpuProfileCooldownMs: 0, // no cooldown
@@ -213,25 +233,27 @@ describe('RuntimeMonitor (coverage)', () => {
     (monitor as any).isProfiling = false;
     (monitor as any).lastCpuProfileTime = 0;
 
-    const anomalyPromise = new Promise<ProfilerEvent>(resolve => {
-      monitor!.on('anomaly', resolve);
+    const anomalyPromise = new Promise<ProfilerEvent>((resolve) => {
+      monitor!.on("anomaly", resolve);
     });
-    const errorPromise = new Promise<Error>(resolve => {
-      monitor!.on('error', resolve);
+    const errorPromise = new Promise<Error>((resolve) => {
+      monitor!.on("error", resolve);
     });
 
     (monitor as any).handleEventLoopLag(200);
 
-    const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000));
+    const timeout = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error("timeout")), 5000),
+    );
     // Either anomaly (with profile) or error is emitted
     const result = await Promise.race([anomalyPromise, errorPromise, timeout]);
 
     // The event was emitted — either a profile was captured or an error occurred
-    assert.ok(result !== undefined, 'Should have emitted anomaly or error');
+    assert.ok(result !== undefined, "Should have emitted anomaly or error");
   });
 
   // ── captureCpuProfile full path: null guards inside callbacks ─────────────
-  it('should handle session becoming null mid-capture gracefully', async () => {
+  it("should handle session becoming null mid-capture gracefully", async () => {
     monitor = new RuntimeMonitor({
       checkIntervalMs: 999999,
       cpuProfileCooldownMs: 0,
@@ -246,20 +268,20 @@ describe('RuntimeMonitor (coverage)', () => {
     const capturePromise = (monitor as any).captureCpuProfile();
 
     // Wait for the `Profiler.enable` post to start, then null the session
-    await new Promise(r => setTimeout(r, 5));
+    await new Promise((r) => setTimeout(r, 5));
     (monitor as any).inspectorSession = null;
 
     const result = await capturePromise;
     // Should not throw; result is either null or a profile object
-    assert.ok(result === null || typeof result === 'object');
+    assert.ok(result === null || typeof result === "object");
   });
 
   // ── Bug Fix #2 regression: heapSnapshotPath must be undefined when write fails ──
-  it('[BUG FIX] anomaly should NOT include heapSnapshotPath when writeHeapSnapshot throws', async () => {
+  it("[BUG FIX] anomaly should NOT include heapSnapshotPath when writeHeapSnapshot throws", async () => {
     // We can't patch a read-only ESM export, so we verify the logic by
     // creating a subclass that simulates the failing path.
-    const { join } = await import('node:path');
-    const { tmpdir } = await import('node:os');
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
 
     // Create a monitor subclass that overrides checkThresholds to exercise the fixed branch
     const FailingMonitor = class extends RuntimeMonitor {
@@ -269,14 +291,14 @@ describe('RuntimeMonitor (coverage)', () => {
         const snapPath = join(tmpdir(), `heap-snapshot-test-${Date.now()}.heapsnapshot`);
         let heapSnapshotPath: string | undefined;
         try {
-          throw new Error('disk full'); // simulate writeHeapSnapshot throwing
-          heapSnapshotPath = snapPath;  // should NOT reach here
+          throw new Error("disk full"); // simulate writeHeapSnapshot throwing
+          heapSnapshotPath = snapPath; // should NOT reach here
         } catch (e) {
-          this.emit('error', e);
+          this.emit("error", e);
         }
 
-        this.emit('anomaly', {
-          type: 'memory-leak' as const,
+        this.emit("anomaly", {
+          type: "memory-leak" as const,
           growthBytes: growth,
           heapSnapshotPath,
           timestamp: Date.now(),
@@ -287,21 +309,24 @@ describe('RuntimeMonitor (coverage)', () => {
     monitor = new FailingMonitor({ checkIntervalMs: 999999 });
     const events: ProfilerEvent[] = [];
     const errors: Error[] = [];
-    monitor.on('anomaly', (e) => events.push(e));
-    monitor.on('error', (e: Error) => errors.push(e));
+    monitor.on("anomaly", (e) => events.push(e));
+    monitor.on("error", (e: Error) => errors.push(e));
 
     await (monitor as any).checkThresholds_simulateFailedSnapshot();
 
-    assert.strictEqual(events.length, 1, 'Should emit anomaly');
-    assert.strictEqual(events[0].type, 'memory-leak');
-    assert.strictEqual(events[0].heapSnapshotPath, undefined,
-      '[BUG FIX] heapSnapshotPath must be undefined when write failed');
-    assert.strictEqual(errors.length, 1, 'Should emit error');
+    assert.strictEqual(events.length, 1, "Should emit anomaly");
+    assert.strictEqual(events[0].type, "memory-leak");
+    assert.strictEqual(
+      events[0].heapSnapshotPath,
+      undefined,
+      "[BUG FIX] heapSnapshotPath must be undefined when write failed",
+    );
+    assert.strictEqual(errors.length, 1, "Should emit error");
   });
 
-  it('[BUG FIX] anomaly should include heapSnapshotPath when writeHeapSnapshot succeeds', async () => {
-    const { join } = await import('node:path');
-    const { tmpdir } = await import('node:os');
+  it("[BUG FIX] anomaly should include heapSnapshotPath when writeHeapSnapshot succeeds", async () => {
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
 
     // Simulate successful write
     const SucceedingMonitor = class extends RuntimeMonitor {
@@ -312,10 +337,10 @@ describe('RuntimeMonitor (coverage)', () => {
           // Don't actually call writeHeapSnapshot (slow), just simulate success
           heapSnapshotPath = snapPath;
         } catch (e) {
-          this.emit('error', e);
+          this.emit("error", e);
         }
-        this.emit('anomaly', {
-          type: 'memory-leak' as const,
+        this.emit("anomaly", {
+          type: "memory-leak" as const,
           growthBytes: 1024,
           heapSnapshotPath,
           timestamp: Date.now(),
@@ -325,12 +350,14 @@ describe('RuntimeMonitor (coverage)', () => {
 
     monitor = new SucceedingMonitor({ checkIntervalMs: 999999 });
     const events: ProfilerEvent[] = [];
-    monitor.on('anomaly', (e) => events.push(e));
+    monitor.on("anomaly", (e) => events.push(e));
 
     await (monitor as any).checkThresholds_simulateSuccessfulSnapshot();
 
     assert.strictEqual(events.length, 1);
-    assert.ok(typeof events[0].heapSnapshotPath === 'string',
-      '[BUG FIX] heapSnapshotPath should be set when write succeeded');
+    assert.ok(
+      typeof events[0].heapSnapshotPath === "string",
+      "[BUG FIX] heapSnapshotPath should be set when write succeeded",
+    );
   });
 });

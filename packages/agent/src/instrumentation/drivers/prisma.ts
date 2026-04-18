@@ -1,5 +1,5 @@
-import { nodeRequire } from './_require.ts';
-import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
+import { nodeRequire } from "./_require.ts";
+import { isAlreadyPatched, wrapMethod } from "./patch-utils.ts";
 
 /**
  * Prisma uses `PrismaClient` with methods like `$queryRaw`, `$executeRaw`,
@@ -8,18 +8,25 @@ import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
  */
 export function patchPrisma(): boolean {
   try {
-    const prisma = nodeRequire('@prisma/client');
+    const prisma = nodeRequire("@prisma/client");
     const proto = prisma.PrismaClient?.prototype;
     if (!proto) return false;
 
     let patched = false;
-    for (const method of ['$queryRaw', '$executeRaw', '$queryRawUnsafe', '$executeRawUnsafe'] as const) {
+    for (const method of [
+      "$queryRaw",
+      "$executeRaw",
+      "$queryRawUnsafe",
+      "$executeRawUnsafe",
+    ] as const) {
       if (proto[method] && !isAlreadyPatched(proto, method)) {
-        wrapMethod(proto, method, '@prisma/client');
+        wrapMethod(proto, method, "@prisma/client");
         patched = true;
       }
     }
     return patched;
-  } catch { /* not installed */ }
+  } catch {
+    /* not installed */
+  }
   return false;
 }

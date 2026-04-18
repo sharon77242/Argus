@@ -1,8 +1,8 @@
-import { EventEmitter } from 'node:events';
-import { FsAnalyzer } from '../analysis/fs-analyzer.ts';
-import type { FixSuggestion } from '../analysis/types.ts';
+import { EventEmitter } from "node:events";
+import { FsAnalyzer } from "../analysis/fs-analyzer.ts";
+import type { FixSuggestion } from "../analysis/types.ts";
 
-import fs from 'node:fs';
+import fs from "node:fs";
 
 /**
  * CAUTION: File System instrumentation can carry significant overhead.
@@ -31,19 +31,34 @@ export class FsInstrumentation extends EventEmitter {
     this.getSourceLine = getSourceLine;
   }
 
+  on(event: "fs", listener: (op: TracedFsOperation) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string | symbol, listener: (...args: any[]) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string | symbol, listener: (...args: any[]) => void): this {
+    return super.on(event, listener);
+  }
+
   public enable(): void {
     if (this.active) return;
 
     try {
       const methodsToPatch = [
-        'readFileSync', 'writeFileSync', 'appendFileSync',
-        'readFile', 'writeFile', 'appendFile'
+        "readFileSync",
+        "writeFileSync",
+        "appendFileSync",
+        "readFile",
+        "writeFile",
+        "appendFile",
       ] as const;
 
       for (const method of methodsToPatch) {
-        if (typeof fs[method] === 'function' && !this.originalMethods.has(method)) {
+        if (typeof fs[method] === "function" && !this.originalMethods.has(method)) {
           this.originalMethods.set(method, fs[method] as FsMethod);
-          (fs as Record<string, unknown>)[method] = this.createPatch(method, fs[method] as FsMethod);
+          (fs as Record<string, unknown>)[method] = this.createPatch(
+            method,
+            fs[method] as FsMethod,
+          );
         }
       }
 
@@ -57,13 +72,16 @@ export class FsInstrumentation extends EventEmitter {
     return (...args: unknown[]) => {
       const start = performance.now();
       const firstArg = args[0];
-      const filePath = typeof firstArg === 'string' ? firstArg
-        : firstArg instanceof URL ? firstArg.pathname
-        : 'unknown';
+      const filePath =
+        typeof firstArg === "string"
+          ? firstArg
+          : firstArg instanceof URL
+            ? firstArg.pathname
+            : "unknown";
       const sourceLine = this.getSourceLine();
 
       const lastArg = args[args.length - 1];
-      if (typeof lastArg === 'function') {
+      if (typeof lastArg === "function") {
         args[args.length - 1] = (...cbArgs: unknown[]) => {
           this.record(methodName, filePath, start, sourceLine);
           return (lastArg as FsMethod)(...cbArgs);
@@ -92,7 +110,7 @@ export class FsInstrumentation extends EventEmitter {
       suggestions: suggestions.length > 0 ? suggestions : undefined,
     };
 
-    this.emit('fs', traced);
+    this.emit("fs", traced);
   }
 
   public disable(): void {

@@ -11,7 +11,7 @@
  * (e.g. http.client.request.start ≥ 18, stream.create ≥ 22) — those are
  * handled at the call site with version checks or try/catch guards.
  */
-import dc from 'node:diagnostics_channel';
+import dc from "node:diagnostics_channel";
 
 /**
  * Returns the diagnostics_channel module.
@@ -37,5 +37,5 @@ export function safeChannel(name: string): ReturnType<typeof dc.channel> {
  * Node 18+ ships the undici-backed HTTP client which publishes to this channel.
  */
 export function supportsHttpDiagnosticsChannel(): boolean {
-  return parseInt(process.versions.node.split('.')[0], 10) >= 18;
+  return parseInt(process.versions.node.split(".")[0], 10) >= 18;
 }

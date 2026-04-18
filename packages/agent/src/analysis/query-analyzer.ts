@@ -1,17 +1,23 @@
-import pkg from 'node-sql-parser';
+import pkg from "node-sql-parser";
 const { Parser } = pkg;
-import type { FixSuggestion } from './types.ts';
+import type { FixSuggestion } from "./types.ts";
 
 // Minimal AST shapes we actually inspect — node-sql-parser ships no exported types.
 interface SelectStmt {
-  type: 'select';
-  columns: '*' | Array<{ expr?: { column?: string } }>;
+  type: "select";
+  columns: "*" | { expr?: { column?: string } }[];
   where?: unknown;
   limit?: { value: unknown[] };
   groupby?: unknown;
 }
-interface UpdateStmt { type: 'update'; where?: unknown; }
-interface DeleteStmt { type: 'delete'; where?: unknown; }
+interface UpdateStmt {
+  type: "update";
+  where?: unknown;
+}
+interface DeleteStmt {
+  type: "delete";
+  where?: unknown;
+}
 type ParsedStmt = SelectStmt | UpdateStmt | DeleteStmt | { type: string };
 
 export interface QueryAnalyzerOptions {
@@ -50,11 +56,11 @@ export class QueryAnalyzer {
       const stmts = (Array.isArray(ast) ? ast : [ast]) as ParsedStmt[];
 
       for (const stmt of stmts) {
-        if (stmt.type === 'select') {
+        if (stmt.type === "select") {
           this.analyzeSelect(stmt as SelectStmt, suggestions);
-        } else if (stmt.type === 'update') {
+        } else if (stmt.type === "update") {
           this.analyzeUpdate(stmt as UpdateStmt, suggestions);
-        } else if (stmt.type === 'delete') {
+        } else if (stmt.type === "delete") {
           this.analyzeDelete(stmt as DeleteStmt, suggestions);
         }
       }
@@ -72,55 +78,60 @@ export class QueryAnalyzer {
   private analyzeSelect(stmt: SelectStmt, suggestions: FixSuggestion[]): void {
     // Rule: no-select-star
     const columns = stmt.columns;
-    if (columns === '*' || (Array.isArray(columns) && columns.some((c) => c.expr?.column === '*'))) {
+    if (
+      columns === "*" ||
+      (Array.isArray(columns) && columns.some((c) => c.expr?.column === "*"))
+    ) {
       suggestions.push({
-        severity: 'warning',
-        rule: 'no-select-star',
-        message: 'SELECT * fetches all columns, increasing I/O and memory usage. List only the columns you need.',
-        suggestedFix: 'Replace SELECT * with explicit column names: SELECT col1, col2, ...',
+        severity: "warning",
+        rule: "no-select-star",
+        message:
+          "SELECT * fetches all columns, increasing I/O and memory usage. List only the columns you need.",
+        suggestedFix: "Replace SELECT * with explicit column names: SELECT col1, col2, ...",
       });
     }
 
     // Rule: missing-limit
     if (!stmt.limit && !stmt.groupby) {
       suggestions.push({
-        severity: 'info',
-        rule: 'missing-limit',
-        message: 'SELECT without LIMIT may return unbounded rows. Consider adding a LIMIT clause.',
-        suggestedFix: 'Add LIMIT N to restrict result size (e.g. LIMIT 100)',
+        severity: "info",
+        rule: "missing-limit",
+        message: "SELECT without LIMIT may return unbounded rows. Consider adding a LIMIT clause.",
+        suggestedFix: "Add LIMIT N to restrict result size (e.g. LIMIT 100)",
       });
     }
 
     // Rule: missing-where-select (full table scan)
     if (!stmt.where && !stmt.limit) {
       suggestions.push({
-        severity: 'warning',
-        rule: 'full-table-scan',
-        message: 'SELECT without WHERE or LIMIT will perform a full table scan.',
-        suggestedFix: 'Add a WHERE clause to filter results or LIMIT to cap the result set.',
+        severity: "warning",
+        rule: "full-table-scan",
+        message: "SELECT without WHERE or LIMIT will perform a full table scan.",
+        suggestedFix: "Add a WHERE clause to filter results or LIMIT to cap the result set.",
       });
     }
 
     // Rule: offset-pagination
     if (stmt.limit && Array.isArray(stmt.limit.value) && stmt.limit.value.length > 1) {
       suggestions.push({
-        severity: 'info',
-        rule: 'offset-pagination',
-        message: 'OFFSET pagination scans all preceding rows and degrades at scale. Consider keyset (cursor) pagination.',
-        suggestedFix: 'Use WHERE id > :last_id LIMIT N instead of OFFSET.',
+        severity: "info",
+        rule: "offset-pagination",
+        message:
+          "OFFSET pagination scans all preceding rows and degrades at scale. Consider keyset (cursor) pagination.",
+        suggestedFix: "Use WHERE id > :last_id LIMIT N instead of OFFSET.",
       });
     }
   }
-
 
   private analyzeUpdate(stmt: UpdateStmt, suggestions: FixSuggestion[]): void {
     // Rule: missing-where-update
     if (!stmt.where) {
       suggestions.push({
-        severity: 'critical',
-        rule: 'missing-where-update',
-        message: 'UPDATE without WHERE will modify every row in the table. This is almost certainly a bug.',
-        suggestedFix: 'Add a WHERE clause to target specific rows.',
+        severity: "critical",
+        rule: "missing-where-update",
+        message:
+          "UPDATE without WHERE will modify every row in the table. This is almost certainly a bug.",
+        suggestedFix: "Add a WHERE clause to target specific rows.",
       });
     }
   }
@@ -129,10 +140,11 @@ export class QueryAnalyzer {
     // Rule: missing-where-delete
     if (!stmt.where) {
       suggestions.push({
-        severity: 'critical',
-        rule: 'missing-where-delete',
-        message: 'DELETE without WHERE will remove every row in the table. This is almost certainly a bug.',
-        suggestedFix: 'Add a WHERE clause to target specific rows.',
+        severity: "critical",
+        rule: "missing-where-delete",
+        message:
+          "DELETE without WHERE will remove every row in the table. This is almost certainly a bug.",
+        suggestedFix: "Add a WHERE clause to target specific rows.",
       });
     }
   }
@@ -143,44 +155,45 @@ export class QueryAnalyzer {
   private analyzeByString(query: string, suggestions: FixSuggestion[]): void {
     const upper = query.toUpperCase().trim();
 
-    if (upper.startsWith('SELECT') && upper.includes('SELECT *')) {
+    if (upper.startsWith("SELECT") && upper.includes("SELECT *")) {
       suggestions.push({
-        severity: 'warning',
-        rule: 'no-select-star',
-        message: 'SELECT * fetches all columns. List only the columns you need.',
+        severity: "warning",
+        rule: "no-select-star",
+        message: "SELECT * fetches all columns. List only the columns you need.",
       });
     }
 
-    if (upper.startsWith('SELECT') && !upper.includes('LIMIT')) {
+    if (upper.startsWith("SELECT") && !upper.includes("LIMIT")) {
       suggestions.push({
-        severity: 'info',
-        rule: 'missing-limit',
-        message: 'SELECT without LIMIT may return unbounded rows.',
+        severity: "info",
+        rule: "missing-limit",
+        message: "SELECT without LIMIT may return unbounded rows.",
       });
     }
 
-    if (upper.startsWith('SELECT') && upper.includes('OFFSET')) {
+    if (upper.startsWith("SELECT") && upper.includes("OFFSET")) {
       suggestions.push({
-        severity: 'info',
-        rule: 'offset-pagination',
-        message: 'OFFSET pagination scans all preceding rows and degrades at scale. Consider keyset (cursor) pagination.',
-        suggestedFix: 'Use WHERE id > :last_id LIMIT N instead of OFFSET.',
+        severity: "info",
+        rule: "offset-pagination",
+        message:
+          "OFFSET pagination scans all preceding rows and degrades at scale. Consider keyset (cursor) pagination.",
+        suggestedFix: "Use WHERE id > :last_id LIMIT N instead of OFFSET.",
       });
     }
 
-    if (upper.startsWith('UPDATE') && !upper.includes('WHERE')) {
+    if (upper.startsWith("UPDATE") && !upper.includes("WHERE")) {
       suggestions.push({
-        severity: 'critical',
-        rule: 'missing-where-update',
-        message: 'UPDATE without WHERE will modify every row.',
+        severity: "critical",
+        rule: "missing-where-update",
+        message: "UPDATE without WHERE will modify every row.",
       });
     }
 
-    if (upper.startsWith('DELETE') && !upper.includes('WHERE')) {
+    if (upper.startsWith("DELETE") && !upper.includes("WHERE")) {
       suggestions.push({
-        severity: 'critical',
-        rule: 'missing-where-delete',
-        message: 'DELETE without WHERE will remove every row.',
+        severity: "critical",
+        rule: "missing-where-delete",
+        message: "DELETE without WHERE will remove every row.",
       });
     }
   }
@@ -192,7 +205,7 @@ export class QueryAnalyzer {
     const now = Date.now();
 
     // Normalize the query to detect repeated structural patterns
-    const normalized = query.replace(/\?\s*/g, '?').trim();
+    const normalized = query.replace(/\?\s*/g, "?").trim();
 
     const entry = this.recentQueries.get(normalized);
 
@@ -204,18 +217,18 @@ export class QueryAnalyzer {
             // First time the threshold is crossed: high-signal initial spike
             entry.warned = true;
             suggestions.push({
-              severity: 'warning',
-              rule: 'n-plus-one',
+              severity: "warning",
+              rule: "n-plus-one",
               message: `N+1 detected: this query pattern was executed ${entry.count} times within ${this.N_PLUS_ONE_WINDOW_MS}ms. This is likely an N+1 query problem.`,
-              suggestedFix: 'Batch these queries into a single query using IN (...) or a JOIN.',
+              suggestedFix: "Batch these queries into a single query using IN (...) or a JOIN.",
             });
           } else {
             // Subsequent crossings: lower-noise ongoing alert
             suggestions.push({
-              severity: 'warning',
-              rule: 'n-plus-one',
+              severity: "warning",
+              rule: "n-plus-one",
               message: `N+1 ongoing: query pattern executed ${entry.count} times (still within the same ${this.N_PLUS_ONE_WINDOW_MS}ms window).`,
-              suggestedFix: 'Batch these queries into a single query using IN (...) or a JOIN.',
+              suggestedFix: "Batch these queries into a single query using IN (...) or a JOIN.",
             });
           }
         }

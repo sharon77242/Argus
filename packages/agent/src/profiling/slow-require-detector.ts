@@ -1,6 +1,6 @@
-import { EventEmitter } from 'node:events';
-import { performance } from 'node:perf_hooks';
-import { getDiagnosticsChannel } from '../instrumentation/safe-channel.ts';
+import { EventEmitter } from "node:events";
+import { performance } from "node:perf_hooks";
+import { getDiagnosticsChannel } from "../instrumentation/safe-channel.ts";
 
 export interface SlowModuleRecord {
   module: string;
@@ -20,9 +20,9 @@ export interface SlowRequireDetectorOptions {
  */
 export class SlowRequireDetector extends EventEmitter {
   private readonly thresholdMs: number;
-  private readonly timings: Map<string, number> = new Map();
+  private readonly timings = new Map<string, number>();
   private active = false;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private subscription: ((msg: unknown) => void) | null = null;
 
   constructor(opts: SlowRequireDetectorOptions = {}) {
@@ -44,7 +44,7 @@ export class SlowRequireDetector extends EventEmitter {
       const dc = getDiagnosticsChannel();
       if (!dc) return this;
 
-      const channel = dc.channel('module.cjs.load');
+      const channel = dc.channel("module.cjs.load");
       const startTimes = new Map<string, number>();
 
       const beforeLoad = (msg: unknown) => {
@@ -62,15 +62,15 @@ export class SlowRequireDetector extends EventEmitter {
         this.timings.set(filename, durationMs);
 
         if (durationMs >= this.thresholdMs) {
-          this.emit('slow-require', { module: filename, durationMs });
+          this.emit("slow-require", { module: filename, durationMs });
         }
       };
 
       // Node 20+ has channel.subscribe; some versions use separate before/after channels
-      const beforeChannel = dc.channel('module.cjs.load.start');
-      const afterChannel = dc.channel('module.cjs.load.finish');
+      const beforeChannel = dc.channel("module.cjs.load.start");
+      const afterChannel = dc.channel("module.cjs.load.finish");
 
-      if (typeof beforeChannel.subscribe === 'function') {
+      if (typeof beforeChannel.subscribe === "function") {
         beforeChannel.subscribe(beforeLoad);
         afterChannel.subscribe(afterLoad);
         this.subscription = () => {

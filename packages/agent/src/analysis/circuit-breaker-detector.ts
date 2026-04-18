@@ -1,10 +1,10 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 
 export interface CircuitBreakerSuggestion {
   destination: string;
   driver?: string;
-  errorRate: number;      // 0–1
+  errorRate: number; // 0–1
   totalCalls: number;
   errorCalls: number;
   windowMs: number;
@@ -50,13 +50,13 @@ interface PersistedState {
 }
 
 function isHttpLike(e: CircuitBreakerEvent): e is HttpLike {
-  return 'statusCode' in e || 'url' in e;
+  return "statusCode" in e || "url" in e;
 }
 
 function isError(e: CircuitBreakerEvent): boolean {
   if (e.error) return true;
   if (isHttpLike(e)) {
-    return typeof e.statusCode === 'number' && e.statusCode >= 500;
+    return typeof e.statusCode === "number" && e.statusCode >= 500;
   }
   return false;
 }
@@ -65,11 +65,15 @@ function getDestination(e: CircuitBreakerEvent): string {
   if (isHttpLike(e)) {
     if (e.host) return e.host;
     if (e.url) {
-      try { return new URL(e.url).hostname; } catch { return e.url; }
+      try {
+        return new URL(e.url).hostname;
+      } catch {
+        return e.url;
+      }
     }
-    return 'unknown-http';
+    return "unknown-http";
   }
-  return (e as QueryLike).host ?? (e as QueryLike).driver ?? 'unknown-db';
+  return e.host ?? e.driver ?? "unknown-db";
 }
 
 /**
@@ -87,13 +91,15 @@ export class CircuitBreakerDetector {
   private readonly persistTo: string | null;
   private priorBuckets: Map<string, DestinationBucket>;
 
-  constructor(opts: {
-    windowMs?: number;
-    minCalls?: number;
-    errorRateThreshold?: number;
-    /** File path to persist bucket state across restarts. Directory is created if needed. */
-    persistTo?: string;
-  } = {}) {
+  constructor(
+    opts: {
+      windowMs?: number;
+      minCalls?: number;
+      errorRateThreshold?: number;
+      /** File path to persist bucket state across restarts. Directory is created if needed. */
+      persistTo?: string;
+    } = {},
+  ) {
     this.windowMs = opts.windowMs ?? DEFAULT_WINDOW_MS;
     this.minCalls = opts.minCalls ?? DEFAULT_MIN_CALLS;
     this.errorRateThreshold = opts.errorRateThreshold ?? DEFAULT_ERROR_RATE;
@@ -128,7 +134,7 @@ export class CircuitBreakerDetector {
       let bucket = buckets.get(dest);
       if (!bucket) {
         bucket = { success: 0, error: 0, firstSeen: ts, lastSeen: ts };
-        if (!isHttpLike(event)) bucket.driver = (event as QueryLike).driver;
+        if (!isHttpLike(event)) bucket.driver = event.driver;
         buckets.set(dest, bucket);
       }
       bucket.lastSeen = Math.max(bucket.lastSeen, ts);
@@ -165,7 +171,7 @@ export class CircuitBreakerDetector {
           `  import CircuitBreaker from 'opossum';`,
           `  const cb = new CircuitBreaker(yourFn, { errorThresholdPercentage: 50, timeout: 3000, resetTimeout: 30000 });`,
           `  cb.fallback(() => cachedResult);`,
-        ].join('\n'),
+        ].join("\n"),
       });
     }
 
@@ -176,14 +182,18 @@ export class CircuitBreakerDetector {
   clearPersistedState(): void {
     this.priorBuckets = new Map();
     if (this.persistTo) {
-      try { writeFileSync(this.persistTo, JSON.stringify({ buckets: {}, savedAt: Date.now() })); } catch { /* ignore */ }
+      try {
+        writeFileSync(this.persistTo, JSON.stringify({ buckets: {}, savedAt: Date.now() }));
+      } catch {
+        /* ignore */
+      }
     }
   }
 
   private loadState(): Map<string, DestinationBucket> {
     if (!this.persistTo) return new Map();
     try {
-      const raw = readFileSync(this.persistTo, 'utf8');
+      const raw = readFileSync(this.persistTo, "utf8");
       const state = JSON.parse(raw) as PersistedState;
       const cutoff = Date.now() - this.windowMs * 2; // discard entries older than 2× window
       const map = new Map<string, DestinationBucket>();
@@ -204,7 +214,9 @@ export class CircuitBreakerDetector {
         buckets: Object.fromEntries(buckets),
         savedAt: now,
       };
-      writeFileSync(this.persistTo, JSON.stringify(state), 'utf8');
-    } catch { /* never crash the host app over persistence */ }
+      writeFileSync(this.persistTo, JSON.stringify(state), "utf8");
+    } catch {
+      /* never crash the host app over persistence */
+    }
   }
 }

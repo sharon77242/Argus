@@ -1,5 +1,5 @@
-import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 
 declare const __filename: string;
 

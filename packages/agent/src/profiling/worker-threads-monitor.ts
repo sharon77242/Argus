@@ -1,6 +1,6 @@
-import { EventEmitter } from 'node:events';
-import { performance } from 'node:perf_hooks';
-import { getDiagnosticsChannel } from '../instrumentation/safe-channel.ts';
+import { EventEmitter } from "node:events";
+import { performance } from "node:perf_hooks";
+import { getDiagnosticsChannel } from "../instrumentation/safe-channel.ts";
 
 export interface WorkerPoolMetrics {
   activeWorkers: number;
@@ -10,8 +10,8 @@ export interface WorkerPoolMetrics {
 }
 
 export interface WorkerPoolEvent {
-  type: 'worker-pool-anomaly';
-  reason: 'queue-depth' | 'slow-task' | 'spawn-spike';
+  type: "worker-pool-anomaly";
+  reason: "queue-depth" | "slow-task" | "spawn-spike";
   metrics: WorkerPoolMetrics;
   thresholdExceeded: number;
   message: string;
@@ -65,8 +65,8 @@ export class WorkerThreadsMonitor extends EventEmitter {
     // Attempt to hook via diagnostics_channel (Node 22+)
     try {
       const dc = getDiagnosticsChannel();
-      if (!dc) throw new Error('unavailable');
-      const ch = dc.channel('worker_threads.Worker.created');
+      if (!dc) throw new Error("unavailable");
+      const ch = dc.channel("worker_threads.Worker.created");
       ch.subscribe(() => {
         this.activeWorkers++;
         this.spawnTimestamps.push(Date.now());
@@ -109,9 +109,9 @@ export class WorkerThreadsMonitor extends EventEmitter {
     if (this.taskTimings.length > 100) this.taskTimings.shift();
 
     if (duration >= this.slowTaskThresholdMs) {
-      this.emit('anomaly', {
-        type: 'worker-pool-anomaly',
-        reason: 'slow-task',
+      this.emit("anomaly", {
+        type: "worker-pool-anomaly",
+        reason: "slow-task",
         metrics: this.getMetrics(),
         thresholdExceeded: this.slowTaskThresholdMs,
         message: `Worker task took ${duration.toFixed(0)}ms (threshold: ${this.slowTaskThresholdMs}ms)`,
@@ -120,9 +120,10 @@ export class WorkerThreadsMonitor extends EventEmitter {
   }
 
   getMetrics(): WorkerPoolMetrics {
-    const avg = this.taskTimings.length > 0
-      ? this.taskTimings.reduce((a, b) => a + b, 0) / this.taskTimings.length
-      : 0;
+    const avg =
+      this.taskTimings.length > 0
+        ? this.taskTimings.reduce((a, b) => a + b, 0) / this.taskTimings.length
+        : 0;
     return {
       activeWorkers: this.activeWorkers,
       queueDepth: this.queueDepth,
@@ -135,9 +136,9 @@ export class WorkerThreadsMonitor extends EventEmitter {
     const metrics = this.getMetrics();
 
     if (metrics.queueDepth > this.queueDepthThreshold) {
-      this.emit('anomaly', {
-        type: 'worker-pool-anomaly',
-        reason: 'queue-depth',
+      this.emit("anomaly", {
+        type: "worker-pool-anomaly",
+        reason: "queue-depth",
         metrics,
         thresholdExceeded: this.queueDepthThreshold,
         message: `Worker queue depth ${metrics.queueDepth} exceeds threshold ${this.queueDepthThreshold}`,
@@ -147,11 +148,11 @@ export class WorkerThreadsMonitor extends EventEmitter {
     // Check spawn spike: count spawns in the last spawnSpikeWindowMs
     const now = Date.now();
     const windowStart = now - this.spawnSpikeWindowMs;
-    this.spawnTimestamps = this.spawnTimestamps.filter(t => t >= windowStart);
+    this.spawnTimestamps = this.spawnTimestamps.filter((t) => t >= windowStart);
     if (this.spawnTimestamps.length >= this.spawnSpikeThreshold) {
-      this.emit('anomaly', {
-        type: 'worker-pool-anomaly',
-        reason: 'spawn-spike',
+      this.emit("anomaly", {
+        type: "worker-pool-anomaly",
+        reason: "spawn-spike",
         metrics,
         thresholdExceeded: this.spawnSpikeThreshold,
         message: `${this.spawnTimestamps.length} workers spawned in ${this.spawnSpikeWindowMs}ms window`,

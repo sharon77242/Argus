@@ -1,6 +1,5 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { once } from "node:events";
 import { RuntimeMonitor, type ProfilerEvent } from "../../src/profiling/runtime-monitor.ts";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -32,7 +31,7 @@ describe("RuntimeMonitor", () => {
 
     // Listen specifically for memory-leak events; ignore event-loop-lag which
     // fires first when the allocation loop blocks the event loop briefly.
-    const p = new Promise<ProfilerEvent>(resolve => {
+    const p = new Promise<ProfilerEvent>((resolve) => {
       localMonitor.on("anomaly", (e) => {
         if (e.type === "memory-leak") resolve(e);
       });
@@ -64,7 +63,7 @@ describe("RuntimeMonitor", () => {
   it("should detect event loop lag and capture CPU profile", async () => {
     monitor.start();
 
-    const p = new Promise(resolve => {
+    const p = new Promise<ProfilerEvent[]>((resolve) => {
       const handler = (event: ProfilerEvent) => {
         if (event.type === "event-loop-lag") {
           monitor.off("anomaly", handler);
@@ -82,7 +81,7 @@ describe("RuntimeMonitor", () => {
       // busy wait
     }
 
-    const timeoutPromise = new Promise((_, reject) =>
+    const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("Timeout waiting for lag event")), 1000),
     );
     const [event] = await Promise.race([p, timeoutPromise]);

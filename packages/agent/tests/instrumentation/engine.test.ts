@@ -25,7 +25,10 @@ describe("InstrumentationEngine", () => {
 
     const query2 = 'UPDATE products SET price = 99.99, status = "SALE" WHERE id = 101';
     const sanitized2 = engine.sanitizeQuery(query2);
-    assert.strictEqual(sanitized2, "UPDATE `products` SET `price` = ?, `status` = ? WHERE `id` = ?");
+    assert.strictEqual(
+      sanitized2,
+      "UPDATE `products` SET `price` = ?, `status` = ? WHERE `id` = ?",
+    );
   });
 
   it("should capture and process diagnostics_channel messages", async () => {
@@ -75,7 +78,7 @@ describe("InstrumentationEngine", () => {
   it("query event includes correlationId when emitted inside runWithContext", async () => {
     engine.enable();
 
-    const ctx = createRequestContext('GET', '/corr-engine-test');
+    const ctx = createRequestContext("GET", "/corr-engine-test");
 
     const capturedEvent = await runWithContext(ctx, async () => {
       const p = once(engine, "query");
@@ -89,8 +92,11 @@ describe("InstrumentationEngine", () => {
     });
 
     assert.ok(capturedEvent, "Should have captured event");
-    assert.equal(capturedEvent.correlationId, ctx.requestId,
-      "correlationId should match the runWithContext requestId");
+    assert.equal(
+      capturedEvent.correlationId,
+      ctx.requestId,
+      "correlationId should match the runWithContext requestId",
+    );
   });
 
   it("query event correlationId is undefined when emitted outside request context", async () => {
@@ -105,7 +111,10 @@ describe("InstrumentationEngine", () => {
       new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 500)),
     ])) as [TracedQuery];
 
-    assert.equal(event.correlationId, undefined,
-      "correlationId should be undefined outside runWithContext");
+    assert.equal(
+      event.correlationId,
+      undefined,
+      "correlationId should be undefined outside runWithContext",
+    );
   });
 });

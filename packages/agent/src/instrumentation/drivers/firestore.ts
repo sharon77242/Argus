@@ -1,5 +1,5 @@
-import { nodeRequire } from './_require.ts';
-import { isAlreadyPatched, wrapMethod, serializeNoSqlQuery } from './patch-utils.ts';
+import { nodeRequire } from "./_require.ts";
+import { isAlreadyPatched, wrapMethod, serializeNoSqlQuery } from "./patch-utils.ts";
 
 /**
  * Google Cloud Firestore patches:
@@ -9,15 +9,15 @@ import { isAlreadyPatched, wrapMethod, serializeNoSqlQuery } from './patch-utils
  */
 export function patchFirestore(): boolean {
   try {
-    const firestore = nodeRequire('@google-cloud/firestore');
+    const firestore = nodeRequire("@google-cloud/firestore");
     let patched = false;
 
     // Firestore instance-level
     const fsProto = firestore.Firestore?.prototype;
     if (fsProto) {
-      for (const method of ['getAll', 'runTransaction'] as const) {
+      for (const method of ["getAll", "runTransaction"] as const) {
         if (fsProto[method] && !isAlreadyPatched(fsProto, method)) {
-          wrapMethod(fsProto, method, '@google-cloud/firestore', serializeNoSqlQuery);
+          wrapMethod(fsProto, method, "@google-cloud/firestore", serializeNoSqlQuery);
           patched = true;
         }
       }
@@ -26,9 +26,9 @@ export function patchFirestore(): boolean {
     // CollectionReference
     const collProto = firestore.CollectionReference?.prototype;
     if (collProto) {
-      for (const method of ['add', 'get'] as const) {
+      for (const method of ["add", "get"] as const) {
         if (collProto[method] && !isAlreadyPatched(collProto, method)) {
-          wrapMethod(collProto, method, '@google-cloud/firestore', serializeNoSqlQuery);
+          wrapMethod(collProto, method, "@google-cloud/firestore", serializeNoSqlQuery);
           patched = true;
         }
       }
@@ -37,15 +37,17 @@ export function patchFirestore(): boolean {
     // DocumentReference
     const docProto = firestore.DocumentReference?.prototype;
     if (docProto) {
-      for (const method of ['get', 'set', 'update', 'delete', 'create'] as const) {
+      for (const method of ["get", "set", "update", "delete", "create"] as const) {
         if (docProto[method] && !isAlreadyPatched(docProto, method)) {
-          wrapMethod(docProto, method, '@google-cloud/firestore', serializeNoSqlQuery);
+          wrapMethod(docProto, method, "@google-cloud/firestore", serializeNoSqlQuery);
           patched = true;
         }
       }
     }
 
     return patched;
-  } catch { /* not installed */ }
+  } catch {
+    /* not installed */
+  }
   return false;
 }

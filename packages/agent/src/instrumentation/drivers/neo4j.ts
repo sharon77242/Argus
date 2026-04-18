@@ -1,30 +1,40 @@
-import { nodeRequire } from './_require.ts';
-import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
+import { nodeRequire } from "./_require.ts";
+import { isAlreadyPatched, wrapMethod } from "./patch-utils.ts";
 
 /**
  * Neo4j graph database uses `Session.prototype.run` for Cypher query execution.
  */
 export function patchNeo4j(): boolean {
   try {
-    const neo4j = nodeRequire('neo4j-driver');
+    const neo4j = nodeRequire("neo4j-driver");
 
     // neo4j-driver exports the Session class via internal modules
     // The safest approach is to patch via a temporary session's prototype
-    const driver = neo4j.driver?.('bolt://localhost');
+    const driver = neo4j.driver?.("bolt://localhost");
     if (driver) {
       const session = driver.session?.();
       if (session) {
         const sessionProto = Object.getPrototypeOf(session);
-        if (sessionProto.run && !isAlreadyPatched(sessionProto, 'run')) {
-          wrapMethod(sessionProto, 'run', 'neo4j-driver');
-          session.close?.().catch?.(() => { /* cleanup */ });
-          driver.close?.().catch?.(() => { /* cleanup */ });
+        if (sessionProto.run && !isAlreadyPatched(sessionProto, "run")) {
+          wrapMethod(sessionProto, "run", "neo4j-driver");
+          session.close?.().catch?.(() => {
+            /* cleanup */
+          });
+          driver.close?.().catch?.(() => {
+            /* cleanup */
+          });
           return true;
         }
-        session.close?.().catch?.(() => { /* cleanup */ });
+        session.close?.().catch?.(() => {
+          /* cleanup */
+        });
       }
-      driver.close?.().catch?.(() => { /* cleanup */ });
+      driver.close?.().catch?.(() => {
+        /* cleanup */
+      });
     }
-  } catch { /* not installed */ }
+  } catch {
+    /* not installed */
+  }
   return false;
 }

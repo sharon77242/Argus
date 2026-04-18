@@ -45,9 +45,9 @@ export class InstrumentationEngine extends EventEmitter {
 
     this.subscribeToChannel(name, (message: unknown) => {
       const msg = message as Record<string, unknown>;
-      if (typeof msg.query === 'string') {
-        const duration = typeof msg.durationMs === 'number' ? msg.durationMs : 0;
-        this.emit('query', this.processQueryDetails(msg.query, duration));
+      if (typeof msg.query === "string") {
+        const duration = typeof msg.durationMs === "number" ? msg.durationMs : 0;
+        this.emit("query", this.processQueryDetails(msg.query, duration));
       }
     });
   }
@@ -116,14 +116,12 @@ export class InstrumentationEngine extends EventEmitter {
       return this.astSanitizer.stripSql(query);
     } catch {
       // Fallback regex if AST parsing fails
-      return (
-        query
-          .replace(/'(?:[^'\\]|\\.)*'/g, "'?'")
-          .replace(/"(?:[^"\\]|\\.)*"/g, '"?"')
-          .replace(/\b\d+\b/g, "?")
-          .replace(/\s+/g, " ")
-          .trim()
-      );
+      return query
+        .replace(/'(?:[^'\\]|\\.)*'/g, "'?'")
+        .replace(/"(?:[^"\\]|\\.)*"/g, '"?"')
+        .replace(/\b\d+\b/g, "?")
+        .replace(/\s+/g, " ")
+        .trim();
     }
   }
 
@@ -144,13 +142,13 @@ export class InstrumentationEngine extends EventEmitter {
     }
 
     if (!Array.isArray(stack)) {
-      const stackStr = new Error().stack ?? '';
-      const lines = stackStr.split('\n');
+      const stackStr = new Error().stack ?? "";
+      const lines = stackStr.split("\n");
       for (const line of lines) {
         if (
-          (line.includes('src') && line.includes('instrumentation')) ||
-          line.includes('node:internal') ||
-          !line.trim().startsWith('at')
+          (line.includes("src") && line.includes("instrumentation")) ||
+          line.includes("node:internal") ||
+          !line.trim().startsWith("at")
         ) {
           continue;
         }
@@ -160,11 +158,11 @@ export class InstrumentationEngine extends EventEmitter {
     }
 
     for (const frame of stack as NodeJS.CallSite[]) {
-      const filename = frame.getFileName() ?? '';
+      const filename = frame.getFileName() ?? "";
       if (
-        !(filename.includes('src') && filename.includes('instrumentation')) &&
-        !filename.startsWith('node:') &&
-        !filename.includes('node_modules')
+        !(filename.includes("src") && filename.includes("instrumentation")) &&
+        !filename.startsWith("node:") &&
+        !filename.includes("node_modules")
       ) {
         return `${filename}:${frame.getLineNumber()}:${frame.getColumnNumber()}`;
       }

@@ -1,8 +1,8 @@
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir, homedir } from 'node:os';
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir, homedir } from "node:os";
 
-const SIGNAL_FILENAME = 'diagnostic_agent_EXPIRED.txt';
+const SIGNAL_FILENAME = "diagnostic_agent_EXPIRED.txt";
 
 /**
  * Writes an expiry signal file to the first writable location among:
@@ -23,7 +23,7 @@ export function writeExpirySignal(message: string): void {
 
   for (const filePath of candidates) {
     try {
-      writeFileSync(filePath, content, { flag: 'w' });
+      writeFileSync(filePath, content, { flag: "w" });
       return;
     } catch {
       // try next location

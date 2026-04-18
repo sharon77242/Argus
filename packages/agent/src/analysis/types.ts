@@ -4,7 +4,7 @@
  */
 export interface FixSuggestion {
   /** How urgent is this fix */
-  severity: 'info' | 'warning' | 'critical';
+  severity: "info" | "warning" | "critical";
   /** Machine-readable rule ID (e.g. 'no-select-star', 'missing-limit') */
   rule: string;
   /** Human-readable explanation of the problem */

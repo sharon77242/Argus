@@ -1,7 +1,7 @@
-import { EventEmitter } from 'node:events';
-import { LogAnalyzer } from '../analysis/log-analyzer.ts';
-import { EntropyChecker } from '../sanitization/entropy-checker.ts';
-import type { FixSuggestion } from '../analysis/types.ts';
+import { EventEmitter } from "node:events";
+import { LogAnalyzer } from "../analysis/log-analyzer.ts";
+import { EntropyChecker } from "../sanitization/entropy-checker.ts";
+import type { FixSuggestion } from "../analysis/types.ts";
 
 export interface TracedLog {
   level: string;
@@ -33,15 +33,26 @@ export class LoggerInstrumentation extends EventEmitter {
     this.options = { scrubContext: true, entropyThreshold: 4.0, ...options };
   }
 
+  on(event: "log", listener: (log: TracedLog) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string | symbol, listener: (...args: any[]) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string | symbol, listener: (...args: any[]) => void): this {
+    return super.on(event, listener);
+  }
+
   public enable(): void {
     if (this.active) return;
 
-    const methods = ['log', 'info', 'warn', 'error'] as const;
+    const methods = ["log", "info", "warn", "error"] as const;
 
     for (const level of methods) {
-      if (typeof console[level] === 'function' && !this.originalLoggers.has(level)) {
+      if (typeof console[level] === "function" && !this.originalLoggers.has(level)) {
         this.originalLoggers.set(level, console[level] as ConsoleMethod);
-        (console as unknown as Record<string, unknown>)[level] = this.createPatch(level, console[level] as ConsoleMethod);
+        (console as unknown as Record<string, unknown>)[level] = this.createPatch(
+          level,
+          console[level] as ConsoleMethod,
+        );
       }
     }
 
@@ -57,9 +68,12 @@ export class LoggerInstrumentation extends EventEmitter {
 
       if (this.options.scrubContext) {
         for (let i = 0; i < args.length; i++) {
-          if (typeof args[i] === 'string') {
+          if (typeof args[i] === "string") {
             const before = args[i] as string;
-            args[i] = EntropyChecker.scrubHighEntropyStrings(before, this.options.entropyThreshold ?? 4.0);
+            args[i] = EntropyChecker.scrubHighEntropyStrings(
+              before,
+              this.options.entropyThreshold ?? 4.0,
+            );
             if (before !== args[i]) scrubbed = true;
           }
         }
@@ -80,14 +94,14 @@ export class LoggerInstrumentation extends EventEmitter {
           timestamp: Date.now(),
           suggestions: suggestions.length > 0 ? suggestions : undefined,
         };
-        this.emit('log', traced);
+        this.emit("log", traced);
       }
     };
   }
 
   public disable(): void {
     if (!this.active) return;
-    const methods = ['log', 'info', 'warn', 'error'] as const;
+    const methods = ["log", "info", "warn", "error"] as const;
     for (const level of methods) {
       const original = this.originalLoggers.get(level);
       if (original) {

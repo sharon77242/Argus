@@ -2,11 +2,11 @@
  * Coverage tests for DiagnosticAgent — DIAGNOSTIC_DEBUG, useConsoleLogger,
  * and remaining uncovered start/stop branches.
  */
-import { describe, it, afterEach } from 'node:test';
-import assert from 'node:assert/strict';
-import { DiagnosticAgent } from '../src/diagnostic-agent.ts';
+import { describe, it, afterEach } from "node:test";
+import assert from "node:assert/strict";
+import { DiagnosticAgent } from "../src/diagnostic-agent.ts";
 
-describe('DiagnosticAgent (debug & logger coverage)', () => {
+describe("DiagnosticAgent (debug & logger coverage)", () => {
   let agent: DiagnosticAgent | null = null;
 
   afterEach(async () => {
@@ -17,8 +17,8 @@ describe('DiagnosticAgent (debug & logger coverage)', () => {
     delete process.env.DIAGNOSTIC_DEBUG;
   });
 
-  it('DIAGNOSTIC_DEBUG=true should activate console logger and not throw', async () => {
-    process.env.DIAGNOSTIC_DEBUG = 'true';
+  it("DIAGNOSTIC_DEBUG=true should activate console logger and not throw", async () => {
+    process.env.DIAGNOSTIC_DEBUG = "true";
     agent = await DiagnosticAgent.create()
       .withInstrumentation()
       .withHttpTracing()
@@ -29,30 +29,34 @@ describe('DiagnosticAgent (debug & logger coverage)', () => {
     assert.ok(agent.isRunning);
 
     // Emit events to trigger the console logger paths
-    agent.emit('anomaly', { type: 'event-loop-lag', lagMs: 100, timestamp: Date.now() });
-    agent.emit('leak', { handlesCount: 5 });
-    agent.emit('crash', { error: new Error('test crash') });
-    agent.emit('error', new Error('test error'));
-    agent.emit('info', 'test info message');
-    agent.emit('log', { scrubbed: true, level: 'warn', durationMs: 1 });
-    agent.emit('log', { scrubbed: false, level: 'info', durationMs: 0 });
-    agent.emit('query', { sanitizedQuery: 'SELECT ?', durationMs: 1.5, suggestions: [{ message: 'hint' }] });
-    agent.emit('query', { sanitizedQuery: 'SELECT ?', durationMs: 0.5 });
-    agent.emit('http', { method: 'GET', url: '/api', statusCode: 200, durationMs: 10.2 });
-    agent.emit('http', { method: 'POST', url: '/api', statusCode: undefined, durationMs: 5.0 });
+    agent.emit("anomaly", { type: "event-loop-lag", lagMs: 100, timestamp: Date.now() });
+    agent.emit("leak", { handlesCount: 5 });
+    agent.emit("crash", { error: new Error("test crash") });
+    agent.emit("error", new Error("test error"));
+    agent.emit("info", "test info message");
+    agent.emit("log", { scrubbed: true, level: "warn", durationMs: 1 });
+    agent.emit("log", { scrubbed: false, level: "info", durationMs: 0 });
+    agent.emit("query", {
+      sanitizedQuery: "SELECT ?",
+      durationMs: 1.5,
+      suggestions: [{ message: "hint" }],
+    });
+    agent.emit("query", { sanitizedQuery: "SELECT ?", durationMs: 0.5 });
+    agent.emit("http", { method: "GET", url: "/api", statusCode: 200, durationMs: 10.2 });
+    agent.emit("http", { method: "POST", url: "/api", statusCode: undefined, durationMs: 5.0 });
   });
 
-  it('crash event with no error.message should use the event itself', async () => {
-    process.env.DIAGNOSTIC_DEBUG = 'true';
+  it("crash event with no error.message should use the event itself", async () => {
+    process.env.DIAGNOSTIC_DEBUG = "true";
     agent = await DiagnosticAgent.create().withCrashGuard().start();
 
     // Emit crash with no error object
-    agent.emit('crash', 'raw crash string');
+    agent.emit("crash", "raw crash string");
     // Emit error with no message
-    agent.emit('error', 'raw error string');
+    agent.emit("error", "raw error string");
   });
 
-  it('start() should be idempotent — second call is a no-op', async () => {
+  it("start() should be idempotent — second call is a no-op", async () => {
     agent = await DiagnosticAgent.create().withCrashGuard().start();
     const first = agent.isRunning;
     await agent.start(); // second call

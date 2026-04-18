@@ -4,14 +4,13 @@
  * that are only reachable once getDiagnosticsChannel() returns non-null (i.e.,
  * after the createRequire fix).
  */
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import { SlowRequireDetector } from '../../src/profiling/slow-require-detector.ts';
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { SlowRequireDetector } from "../../src/profiling/slow-require-detector.ts";
 
-describe('SlowRequireDetector (coverage)', () => {
-
+describe("SlowRequireDetector (coverage)", () => {
   // ── patch() reaches getDiagnosticsChannel() and channel setup ───────────────
-  it('patch() executes channel subscription code when diagnostics_channel is available', () => {
+  it("patch() executes channel subscription code when diagnostics_channel is available", () => {
     const d = new SlowRequireDetector({ thresholdMs: 100 });
 
     // Calling patch() will now reach getDiagnosticsChannel() via createRequire.
@@ -26,7 +25,7 @@ describe('SlowRequireDetector (coverage)', () => {
   });
 
   // ── unpatch() calls subscription() and nulls it ───────────────────────────
-  it('unpatch() invokes and clears the subscription callback', () => {
+  it("unpatch() invokes and clears the subscription callback", () => {
     const d = new SlowRequireDetector({ thresholdMs: 100 });
     d.patch();
 
@@ -37,32 +36,36 @@ describe('SlowRequireDetector (coverage)', () => {
 
     // Inject a mock subscription so we can assert it's called
     let called = false;
-    (d as any).subscription = () => { called = true; };
+    (d as any).subscription = () => {
+      called = true;
+    };
 
     d.unpatch();
 
-    assert.strictEqual(called, true, 'subscription callback should be invoked');
-    assert.strictEqual((d as any).subscription, null, 'subscription should be nulled');
+    assert.strictEqual(called, true, "subscription callback should be invoked");
+    assert.strictEqual((d as any).subscription, null, "subscription should be nulled");
     assert.strictEqual((d as any).active, false);
   });
 
   // ── unpatch() when already inactive is a no-op ────────────────────────────
-  it('unpatch() when active=false returns immediately', () => {
+  it("unpatch() when active=false returns immediately", () => {
     const d = new SlowRequireDetector();
     // Never patched → active is false
     assert.strictEqual((d as any).active, false);
 
     // Inject a mock subscription to detect if it gets called
     let called = false;
-    (d as any).subscription = () => { called = true; };
+    (d as any).subscription = () => {
+      called = true;
+    };
 
     d.unpatch(); // should be a no-op on line 95
 
-    assert.strictEqual(called, false, 'subscription must NOT be called when already inactive');
+    assert.strictEqual(called, false, "subscription must NOT be called when already inactive");
   });
 
   // ── patch() is idempotent ─────────────────────────────────────────────────
-  it('double patch() is a no-op (line 37: if active return this)', () => {
+  it("double patch() is a no-op (line 37: if active return this)", () => {
     const d = new SlowRequireDetector();
     d.patch();
 
@@ -72,13 +75,17 @@ describe('SlowRequireDetector (coverage)', () => {
     d.patch(); // second call — hits line 37 guard
 
     // subscription reference must not change on second call
-    assert.strictEqual((d as any).subscription, firstSub, 'subscription must not be replaced on second patch()');
+    assert.strictEqual(
+      (d as any).subscription,
+      firstSub,
+      "subscription must not be replaced on second patch()",
+    );
 
     d.unpatch();
   });
 
   // ── beforeLoad / afterLoad handlers fire slow-require event ──────────────
-  it('slow-require event fires when a load exceeds the threshold', () => {
+  it("slow-require event fires when a load exceeds the threshold", () => {
     const d = new SlowRequireDetector({ thresholdMs: 0 }); // threshold 0 → every module fires
     d.patch();
 
@@ -89,23 +96,23 @@ describe('SlowRequireDetector (coverage)', () => {
     // Instead, manually simulate by accessing internals.
 
     const slowEvents: { module: string; durationMs: number }[] = [];
-    d.on('slow-require', (e) => slowEvents.push(e));
+    d.on("slow-require", (e) => slowEvents.push(e));
 
     // Inject timing directly into the timings map (simulates afterLoad handler writing it)
-    (d as any).timings.set('/fake/module.js', 500);
+    (d as any).timings.set("/fake/module.js", 500);
 
     // Manually fire what afterLoad would do: durationMs >= threshold → emit
-    d.emit('slow-require', { module: '/fake/module.js', durationMs: 500 });
+    d.emit("slow-require", { module: "/fake/module.js", durationMs: 500 });
 
     assert.strictEqual(slowEvents.length, 1);
-    assert.strictEqual(slowEvents[0].module, '/fake/module.js');
+    assert.strictEqual(slowEvents[0].module, "/fake/module.js");
     assert.strictEqual(slowEvents[0].durationMs, 500);
 
     d.unpatch();
   });
 
   // ── fallback branch: subscribe is not a function ──────────────────────────
-  it('patch() uses fallback channel.subscribe when beforeChannel.subscribe is absent', () => {
+  it("patch() uses fallback channel.subscribe when beforeChannel.subscribe is absent", () => {
     const d = new SlowRequireDetector({ thresholdMs: 100 });
 
     // Inject a mock getDiagnosticsChannel result that forces the fallback branch
@@ -113,7 +120,9 @@ describe('SlowRequireDetector (coverage)', () => {
     const subscribed: string[] = [];
     const mockDc = {
       channel: (name: string) => ({
-        subscribe: (fn: (msg: unknown) => void) => { subscribed.push(name); },
+        subscribe: (_fn: (msg: unknown) => void) => {
+          subscribed.push(name);
+        },
         unsubscribe: (_fn: (msg: unknown) => void) => {},
       }),
     };
@@ -125,13 +134,16 @@ describe('SlowRequireDetector (coverage)', () => {
     // Simulate patch() internals directly with mockDc:
     // (replicates the fallback else-branch in patch())
     {
-      const channel = mockDc.channel('module.cjs.load');
+      const channel = mockDc.channel("module.cjs.load");
       const beforeLoad = (_msg: unknown) => {};
       channel.subscribe(beforeLoad);
       (d as any).subscription = () => channel.unsubscribe(beforeLoad);
     }
 
-    assert.ok(subscribed.includes('module.cjs.load'), 'fallback channel.subscribe should have been called');
+    assert.ok(
+      subscribed.includes("module.cjs.load"),
+      "fallback channel.subscribe should have been called",
+    );
 
     // Calling the subscription teardown (covers lines 85-88)
     (d as any).subscription?.();

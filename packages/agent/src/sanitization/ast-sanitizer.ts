@@ -3,10 +3,10 @@ const { Parser } = pkg;
 
 // Keys whose values are query operators, not user data — must be preserved.
 // e.g. { age: { $gt: 30 } } → { age: { $gt: '?' } } keeps the operator key '$gt'.
-const NOSQL_OPERATOR_PREFIXES = ['$', '_'];
+const NOSQL_OPERATOR_PREFIXES = ["$", "_"];
 
 function isOperatorKey(key: string): boolean {
-  return NOSQL_OPERATOR_PREFIXES.some(p => key.startsWith(p));
+  return NOSQL_OPERATOR_PREFIXES.some((p) => key.startsWith(p));
 }
 
 export class AstSanitizer {
@@ -30,21 +30,23 @@ export class AstSanitizer {
    */
   public sanitizeDocument(doc: unknown): unknown {
     if (Array.isArray(doc)) {
-      return doc.map(item => this.sanitizeDocument(item));
+      return doc.map((item) => this.sanitizeDocument(item));
     }
-    if (doc !== null && typeof doc === 'object') {
+    if (doc !== null && typeof doc === "object") {
       const result: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(doc as Record<string, unknown>)) {
         // Recurse into operator sub-documents; replace primitive values with '?'
-        result[key] = (value !== null && typeof value === 'object')
-          ? this.sanitizeDocument(value)
-          : isOperatorKey(key) ? value  // keep operator flag values (true/false/$exists etc.)
-          : '?';
+        result[key] =
+          value !== null && typeof value === "object"
+            ? this.sanitizeDocument(value)
+            : isOperatorKey(key)
+              ? value // keep operator flag values (true/false/$exists etc.)
+              : "?";
       }
       return result;
     }
     // Primitive at top-level (e.g. a bare string/number filter value)
-    return '?';
+    return "?";
   }
 
   private traverseSql(node: unknown): void {
@@ -55,16 +57,22 @@ export class AstSanitizer {
       return;
     }
 
-    if (node !== null && typeof node === 'object') {
+    if (node !== null && typeof node === "object") {
       const n = node as Record<string, unknown>;
       const literalTypes = [
-        'number', 'string', 'single_quote_string', 'double_quote_string',
-        'hex_string', 'bit_string', 'bool', 'null'
+        "number",
+        "string",
+        "single_quote_string",
+        "double_quote_string",
+        "hex_string",
+        "bit_string",
+        "bool",
+        "null",
       ];
 
-      if (typeof n.type === 'string' && literalTypes.includes(n.type)) {
-        n.type = 'origin';
-        n.value = '?';
+      if (typeof n.type === "string" && literalTypes.includes(n.type)) {
+        n.type = "origin";
+        n.value = "?";
       } else {
         for (const key of Object.keys(n)) {
           this.traverseSql(n[key]);

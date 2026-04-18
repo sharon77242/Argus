@@ -1,24 +1,35 @@
-import { EventEmitter } from 'node:events';
-import { SourceMapResolver } from './profiling/source-map-resolver.ts';
-import { RuntimeMonitor, type RuntimeMonitorOptions, type ProfilerEvent } from './profiling/runtime-monitor.ts';
-import { InstrumentationEngine, type TracedQuery, type InstrumentationOptions } from './instrumentation/engine.ts';
-import { MetricsAggregator, type AggregatorEvent } from './export/aggregator.ts';
-import { OTLPExporter, type ExporterConfig } from './export/exporter.ts';
-import { EntropyChecker } from './sanitization/entropy-checker.ts';
-import { applyDriverPatches, removeDriverPatches } from './instrumentation/drivers/index.ts';
-import { QueryAnalyzer, type QueryAnalyzerOptions } from './analysis/query-analyzer.ts';
-import { StaticScanner } from './analysis/static-scanner.ts';
-import { HttpInstrumentation } from './instrumentation/http.ts';
-import { FsInstrumentation } from './instrumentation/fs.ts';
-import { LoggerInstrumentation, type LoggerOptions } from './instrumentation/logger.ts';
-import { CrashGuard } from './profiling/crash-guard.ts';
-import { ResourceLeakMonitor, type ResourceLeakMonitorOptions } from './profiling/resource-leak-monitor.ts';
-import { AuditScanner } from './analysis/audit-scanner.ts';
-import { detectAppTypes, type DetectionResult } from './profiling/app-type-detector.ts';
-import { validateLicense, type LicenseClaims } from './licensing/license-validator.ts';
-import { checkClockIntegrity } from './licensing/clock-guard.ts';
-import { writeExpirySignal } from './licensing/expiry-signal.ts';
-import { GracefulShutdown, type GracefulShutdownOptions } from './profiling/graceful-shutdown.ts';
+import { EventEmitter } from "node:events";
+import { SourceMapResolver } from "./profiling/source-map-resolver.ts";
+import {
+  RuntimeMonitor,
+  type RuntimeMonitorOptions,
+  type ProfilerEvent,
+} from "./profiling/runtime-monitor.ts";
+import {
+  InstrumentationEngine,
+  type TracedQuery,
+  type InstrumentationOptions,
+} from "./instrumentation/engine.ts";
+import { MetricsAggregator, type AggregatorEvent } from "./export/aggregator.ts";
+import { OTLPExporter, type ExporterConfig } from "./export/exporter.ts";
+import { EntropyChecker } from "./sanitization/entropy-checker.ts";
+import { applyDriverPatches, removeDriverPatches } from "./instrumentation/drivers/index.ts";
+import { QueryAnalyzer, type QueryAnalyzerOptions } from "./analysis/query-analyzer.ts";
+import { StaticScanner } from "./analysis/static-scanner.ts";
+import { HttpInstrumentation } from "./instrumentation/http.ts";
+import { FsInstrumentation } from "./instrumentation/fs.ts";
+import { LoggerInstrumentation, type LoggerOptions } from "./instrumentation/logger.ts";
+import { CrashGuard } from "./profiling/crash-guard.ts";
+import {
+  ResourceLeakMonitor,
+  type ResourceLeakMonitorOptions,
+} from "./profiling/resource-leak-monitor.ts";
+import { AuditScanner } from "./analysis/audit-scanner.ts";
+import { detectAppTypes, type DetectionResult } from "./profiling/app-type-detector.ts";
+import { validateLicense, type LicenseClaims } from "./licensing/license-validator.ts";
+import { checkClockIntegrity } from "./licensing/clock-guard.ts";
+import { writeExpirySignal } from "./licensing/expiry-signal.ts";
+import { GracefulShutdown, type GracefulShutdownOptions } from "./profiling/graceful-shutdown.ts";
 
 // WeakMap-based private storage for license claims — avoids exposing internal field on agent
 const licenseClaims = new WeakMap<DiagnosticAgent, LicenseClaims>();
@@ -29,12 +40,12 @@ export function shouldExport(eventType: string, claims: LicenseClaims | null): b
   // sampleRates is always {} — no sampling side-effects on any tier
 }
 
-export type AppType = 'web' | 'db' | 'worker';
+export type AppType = "web" | "db" | "worker";
 
 export interface AgentProfileConfig {
   enabled?: boolean;
-  environment?: 'dev' | 'test' | 'prod';
-  appType?: 'auto' | AppType | AppType[];
+  environment?: "dev" | "test" | "prod";
+  appType?: "auto" | AppType | AppType[];
   workspaceDir?: string;
   /** Options forwarded to QueryAnalyzer when query analysis is enabled. */
   queryAnalysis?: QueryAnalyzerOptions;
@@ -96,7 +107,7 @@ export class DiagnosticAgent extends EventEmitter {
 
   private running = false;
   // Listeners added by useConsoleLogger — kept so they can be removed on stop().
-  private debugListeners: Array<[string, (...args: unknown[]) => void]> = [];
+  private debugListeners: [string, (...args: unknown[]) => void][] = [];
 
   // Private constructor — use DiagnosticAgent.create()
   private constructor() {
@@ -131,25 +142,26 @@ export class DiagnosticAgent extends EventEmitter {
    */
   public static createProfile(config: AgentProfileConfig): DiagnosticAgent {
     const agent = new DiagnosticAgent();
-    
+
     // Globally kill-switch the agent; .start() and .stop() will become 0-overhead
     // Environment variables take precedence over config object
     const envEnabled = process.env.DIAGNOSTIC_AGENT_ENABLED;
-    const isGloballyDisabled = envEnabled !== undefined 
-      ? envEnabled === 'false' || envEnabled === '0'
-      : config.enabled === false;
+    const isGloballyDisabled =
+      envEnabled !== undefined
+        ? envEnabled === "false" || envEnabled === "0"
+        : config.enabled === false;
 
     if (isGloballyDisabled) {
       agent.globallyDisabled = true;
       return agent;
     }
 
-    const env = config.environment ?? 'prod';
+    const env = config.environment ?? "prod";
 
     // Resolve app types — 'auto' triggers package.json scanning
     let appTypes: AppType[];
-    const selectedType = config.appType ?? 'auto';
-    if (selectedType === 'auto') {
+    const selectedType = config.appType ?? "auto";
+    if (selectedType === "auto") {
       const detected = detectAppTypes(config.workspaceDir);
       if (detected.types.length > 0) {
         appTypes = detected.types;
@@ -157,12 +169,15 @@ export class DiagnosticAgent extends EventEmitter {
         // No recognized packages found — don’t silently assume 'web'.
         // Emit a dev-time notice and apply no app-type-specific modules.
         appTypes = [];
-        if (env !== 'prod') {
+        if (env !== "prod") {
           // Delay to after construction so listeners can attach
-        setImmediate(() => { agent.emit('info',
-            'DiagnosticAgent: auto-detection found no recognized app type in package.json. ' +
-            'Pass appType explicitly ("web" | "db" | "worker") to enable app-specific monitoring.'
-          ); });
+          setImmediate(() => {
+            agent.emit(
+              "info",
+              "DiagnosticAgent: auto-detection found no recognized app type in package.json. " +
+                'Pass appType explicitly ("web" | "db" | "worker") to enable app-specific monitoring.',
+            );
+          });
         }
       }
     } else {
@@ -174,7 +189,7 @@ export class DiagnosticAgent extends EventEmitter {
     agent.withLogTracing();
 
     // 2. Dev/Test Scanners (Non-Prod)
-    if (env === 'dev' || env === 'test') {
+    if (env === "dev" || env === "test") {
       agent.withFsTracing();
       if (config.workspaceDir) {
         agent.withStaticScanner(config.workspaceDir);
@@ -187,17 +202,17 @@ export class DiagnosticAgent extends EventEmitter {
     //    Each `with*()` call is idempotent, so duplicates across types are harmless.
     for (const app of appTypes) {
       switch (app) {
-        case 'web':
+        case "web":
           agent.withHttpTracing();
           agent.withResourceLeakMonitor(); // Catch Sockets
           agent.withInstrumentation({ autoPatching: true }); // Catch remote db calls
           break;
-        case 'db':
+        case "db":
           agent.withQueryAnalysis(config.queryAnalysis ?? {});
           agent.withInstrumentation({ autoPatching: true });
           agent.withResourceLeakMonitor(); // Catch Db connection leaks
           break;
-        case 'worker':
+        case "worker":
           agent.withRuntimeMonitor(); // Catch memory leaks/CPU hangs heavily
           agent.withResourceLeakMonitor();
           agent.withInstrumentation({ autoPatching: true });
@@ -386,7 +401,7 @@ export class DiagnosticAgent extends EventEmitter {
   public async start(): Promise<this> {
     if (this.globallyDisabled || this.running) return this;
 
-    if (process.env.DIAGNOSTIC_DEBUG === 'true') {
+    if (process.env.DIAGNOSTIC_DEBUG === "true") {
       this.useConsoleLogger();
     }
 
@@ -412,18 +427,30 @@ export class DiagnosticAgent extends EventEmitter {
 
     try {
       const claims = validateLicense(licenseKey);
-      if (checkClockIntegrity(claims.tier, Date.now()) === 'rollback') {
-        this.emit('error', new Error('DiagnosticAgent: system clock anomaly detected — running in free mode'));
+      if (checkClockIntegrity(claims.tier, Date.now()) === "rollback") {
+        this.emit(
+          "error",
+          new Error("DiagnosticAgent: system clock anomaly detected — running in free mode"),
+        );
       } else {
         licenseClaims.set(this, claims);
-        this.emit('info', `DiagnosticAgent: tier=${claims.tier}, exp=${new Date(claims.exp * 1000).toISOString()}`);
+        this.emit(
+          "info",
+          `DiagnosticAgent: tier=${claims.tier}, exp=${new Date(claims.exp * 1000).toISOString()}`,
+        );
       }
     } catch (err) {
-      if ((err as Error).message === 'EXPIRED') {
-        writeExpirySignal('Renew at: https://argus.dev/billing');
-        this.emit('info', 'DiagnosticAgent: license expired — running in free mode. Renew at: https://argus.dev/billing');
+      if ((err as Error).message === "EXPIRED") {
+        writeExpirySignal("Renew at: https://argus.dev/billing");
+        this.emit(
+          "info",
+          "DiagnosticAgent: license expired — running in free mode. Renew at: https://argus.dev/billing",
+        );
       } else {
-        this.emit('error', new Error(`DiagnosticAgent: invalid license — ${(err as Error).message}`));
+        this.emit(
+          "error",
+          new Error(`DiagnosticAgent: invalid license — ${(err as Error).message}`),
+        );
       }
     }
   }
@@ -444,24 +471,24 @@ export class DiagnosticAgent extends EventEmitter {
     this.exporter = new OTLPExporter(this.exporterConfig);
     const exporter = this.exporter;
 
-    this.aggregator!.on('flush', (events: AggregatorEvent[]) => {
+    this.aggregator!.on("flush", (events: AggregatorEvent[]) => {
       void (async () => {
         const claims = licenseClaims.get(this) ?? null;
-        const exportable = events.filter(e => shouldExport(e.metricName, claims));
+        const exportable = events.filter((e) => shouldExport(e.metricName, claims));
         if (exportable.length === 0) return;
 
         const threshold = this.entropyThreshold;
-        const scrubbed = exportable.map(e => ({
+        const scrubbed = exportable.map((e) => ({
           ...e,
           payload: JSON.parse(
-            EntropyChecker.scrubHighEntropyStrings(JSON.stringify(e.payload), threshold)
+            EntropyChecker.scrubHighEntropyStrings(JSON.stringify(e.payload), threshold),
           ) as Record<string, unknown>,
         }));
 
         try {
           await exporter.export(scrubbed);
         } catch (err) {
-          this.emit('error', err);
+          this.emit("error", err);
         }
       })();
     });
@@ -474,11 +501,15 @@ export class DiagnosticAgent extends EventEmitter {
     this.monitor = new RuntimeMonitor(this.monitorOptions);
     const aggregator = this.aggregator!;
 
-    this.monitor.on('anomaly', (event: ProfilerEvent) => {
-      aggregator.record(event.type, event.lagMs ?? event.growthBytes ?? 0, event as unknown as Record<string, unknown>);
-      this.emit('anomaly', event);
+    this.monitor.on("anomaly", (event: ProfilerEvent) => {
+      aggregator.record(
+        event.type,
+        event.lagMs ?? event.growthBytes ?? 0,
+        event as unknown as Record<string, unknown>,
+      );
+      this.emit("anomaly", event);
     });
-    this.monitor.on('error', (err) => this.emit('error', err));
+    this.monitor.on("error", (err) => this.emit("error", err));
     this.monitor.start();
   }
 
@@ -497,12 +528,12 @@ export class DiagnosticAgent extends EventEmitter {
     this.engine = new InstrumentationEngine(this.instrumentationOptions);
     const aggregator = this.aggregator!;
 
-    this.engine.on('query', (traced: TracedQuery) => {
+    this.engine.on("query", (traced: TracedQuery) => {
       const enriched = this.queryAnalyzer
         ? { ...traced, suggestions: this.queryAnalyzer.analyze(traced.sanitizedQuery) }
         : traced;
-      aggregator.record('query', traced.durationMs, enriched as Record<string, unknown>);
-      this.emit('query', enriched);
+      aggregator.record("query", traced.durationMs, enriched as Record<string, unknown>);
+      this.emit("query", enriched);
     });
 
     this.engine.enable();
@@ -512,18 +543,21 @@ export class DiagnosticAgent extends EventEmitter {
   private wireTrackers(): void {
     if (this.httpTracingEnabled) {
       this.httpTracker = new HttpInstrumentation(() => this.engine?.extractSourceLine());
-      this.wireTracker(this.httpTracker, 'request', 'http');
+      this.wireTracker(this.httpTracker, "request", "http");
     }
 
     if (this.fsTracingEnabled) {
       this.fsTracker = new FsInstrumentation(() => this.engine?.extractSourceLine());
-      this.wireTracker(this.fsTracker, 'fs', 'fs');
+      this.wireTracker(this.fsTracker, "fs", "fs");
     }
 
     if (this.logTracingOptions) {
       this.logTracingOptions.entropyThreshold ??= this.entropyThreshold;
-      this.logTracker = new LoggerInstrumentation(() => this.engine?.extractSourceLine(), this.logTracingOptions);
-      this.wireTracker(this.logTracker, 'log', 'log');
+      this.logTracker = new LoggerInstrumentation(
+        () => this.engine?.extractSourceLine(),
+        this.logTracingOptions,
+      );
+      this.wireTracker(this.logTracker, "log", "log");
     }
   }
 
@@ -534,13 +568,13 @@ export class DiagnosticAgent extends EventEmitter {
         (stack) => stack,
         () => this.stop(), // flush telemetry before process.exit(1)
       );
-      this.crashGuard.on('crash', (event) => this.emit('crash', event));
+      this.crashGuard.on("crash", (event) => this.emit("crash", event));
       this.crashGuard.enable();
     }
 
     if (this.leakMonitorOptions) {
       this.leakMonitor = new ResourceLeakMonitor(this.leakMonitorOptions);
-      this.leakMonitor.on('leak', (event) => this.emit('leak', event));
+      this.leakMonitor.on("leak", (event) => this.emit("leak", event));
       this.leakMonitor.start();
     }
   }
@@ -548,15 +582,19 @@ export class DiagnosticAgent extends EventEmitter {
   /** Steps 7 + 13 — Fire-and-forget static and audit scans. */
   private runStartupScans(): void {
     if (this.staticScanDir) {
-      new StaticScanner(this.staticScanDir).scan()
-        .then((results) => this.emit('scan', results))
-        .catch((err) => this.emit('error', err));
+      new StaticScanner(this.staticScanDir)
+        .scan()
+        .then((results) => this.emit("scan", results))
+        .catch((err) => this.emit("error", err));
     }
 
     if (this.auditScanDir) {
-      new AuditScanner(this.auditScanDir).scan()
-        .then((result) => { if (result) this.emit('audit', result); })
-        .catch((err) => this.emit('error', err));
+      new AuditScanner(this.auditScanDir)
+        .scan()
+        .then((result) => {
+          if (result) this.emit("audit", result);
+        })
+        .catch((err) => this.emit("error", err));
     }
   }
 
@@ -571,6 +609,7 @@ export class DiagnosticAgent extends EventEmitter {
    * Gracefully tear down every subsystem.
    * Returns a Promise so callers (e.g. GracefulShutdown) can await flush completion.
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   public async stop(): Promise<void> {
     if (this.globallyDisabled || !this.running) return;
 
@@ -584,7 +623,7 @@ export class DiagnosticAgent extends EventEmitter {
 
     this.aggregator?.disable(); // flushes remaining buffer
     this.resolver?.destroy();
-    
+
     if (this.instrumentationOptions?.autoPatching) {
       removeDriverPatches(); // restore original prototypes
     }
@@ -619,38 +658,62 @@ export class DiagnosticAgent extends EventEmitter {
    * @param level   `'warn'` — anomalies/crashes/errors only (default)
    *                `'verbose'` — also logs every query and HTTP request
    */
-  private useConsoleLogger(prefix = '[DiagAgent]', level: 'warn' | 'verbose' = 'verbose'): this {
+  private useConsoleLogger(prefix = "[DiagAgent]", level: "warn" | "verbose" = "verbose"): this {
     const add = (event: string, fn: (...args: unknown[]) => void) => {
       this.on(event, fn);
       this.debugListeners.push([event, fn]);
     };
 
-    add('anomaly', (a) => { const ev = a as { type: string }; console.warn(`${prefix} ANOMALY type=${ev.type}`, a); });
-    add('leak',    (l) => { const ev = l as { handlesCount: number }; console.warn(`${prefix} LEAK    handles=${ev.handlesCount}`); });
-    add('crash',   (c) => { const ev = c as { error?: Error }; console.error(`${prefix} CRASH   ${ev.error?.message ?? c}`); });
-    add('error',   (e) => { const ev = e as Error | undefined; console.error(`${prefix} ERROR   ${ev?.message ?? e}`); });
-    add('info',    (m) => { console.info(`${prefix} INFO    ${String(m)}`); });
-    add('log',     (l) => { const ev = l as { scrubbed: boolean; level: string }; if (ev.scrubbed) console.warn(`${prefix} SCRUB   console.${ev.level} contained secrets — redacted`); });
+    add("anomaly", (a) => {
+      const ev = a as { type: string };
+      console.warn(`${prefix} ANOMALY type=${ev.type}`, a);
+    });
+    add("leak", (l) => {
+      const ev = l as { handlesCount: number };
+      console.warn(`${prefix} LEAK    handles=${ev.handlesCount}`);
+    });
+    add("crash", (c) => {
+      const ev = c as { error?: Error };
+      console.error(`${prefix} CRASH   ${ev.error?.message ?? String(c)}`);
+    });
+    add("error", (e) => {
+      const ev = e as Error | undefined;
+      console.error(`${prefix} ERROR   ${ev?.message ?? String(e)}`);
+    });
+    add("info", (m) => {
+      console.info(`${prefix} INFO    ${String(m)}`);
+    });
+    add("log", (l) => {
+      const ev = l as { scrubbed: boolean; level: string };
+      if (ev.scrubbed)
+        console.warn(`${prefix} SCRUB   console.${ev.level} contained secrets — redacted`);
+    });
 
-    if (level === 'verbose') {
-      add('query', (q) => {
-        const ev = q as { durationMs: number; sanitizedQuery: string; suggestions?: Array<{ message: string }> };
-        const hints = ev.suggestions?.map((s) => s.message).join(' | ');
-        const suffix = hints ? `\n  ⚠ ${hints}` : '';
-        console.log(`${prefix} QUERY   [${ev.durationMs.toFixed(1)}ms] ${ev.sanitizedQuery}${suffix}`);
+    if (level === "verbose") {
+      add("query", (q) => {
+        const ev = q as {
+          durationMs: number;
+          sanitizedQuery: string;
+          suggestions?: { message: string }[];
+        };
+        const hints = ev.suggestions?.map((s) => s.message).join(" | ");
+        const suffix = hints ? `\n  ⚠ ${hints}` : "";
+        console.log(
+          `${prefix} QUERY   [${ev.durationMs.toFixed(1)}ms] ${ev.sanitizedQuery}${suffix}`,
+        );
       });
-      add('http', (r) => {
+      add("http", (r) => {
         const ev = r as { method: string; url: string; statusCode?: number; durationMs: number };
-        console.log(`${prefix} HTTP    ${ev.method} ${ev.url} → ${ev.statusCode ?? '---'} (${ev.durationMs.toFixed(1)}ms)`);
+        console.log(
+          `${prefix} HTTP    ${ev.method} ${ev.url} → ${ev.statusCode ?? "---"} (${ev.durationMs.toFixed(1)}ms)`,
+        );
       });
     }
 
     return this;
   }
 
-
   // ── convenience accessors ─────────────────────────────────────
-
 
   /** Returns `true` if the agent has been started and not yet stopped. */
   public get isRunning(): boolean {
@@ -663,7 +726,9 @@ export class DiagnosticAgent extends EventEmitter {
    */
   public async traceQuery<T>(query: string, executeFn: () => Promise<T>): Promise<T> {
     if (!this.engine) {
-      throw new Error('Instrumentation is not enabled. Call .withInstrumentation() before .start().');
+      throw new Error(
+        "Instrumentation is not enabled. Call .withInstrumentation() before .start().",
+      );
     }
     return this.engine.traceQuery(query, executeFn);
   }
@@ -674,7 +739,7 @@ export class DiagnosticAgent extends EventEmitter {
    */
   public async resolvePosition(filePath: string, line: number, column: number) {
     if (!this.resolver) {
-      throw new Error('Source maps are not enabled. Call .withSourceMaps() before .start().');
+      throw new Error("Source maps are not enabled. Call .withSourceMaps() before .start().");
     }
     return this.resolver.resolvePosition(filePath, line, column);
   }

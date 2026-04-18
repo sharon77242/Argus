@@ -1,4 +1,4 @@
-import type { DiagnosticAgent } from '../diagnostic-agent.ts';
+import type { DiagnosticAgent } from "../diagnostic-agent.ts";
 
 export interface GracefulShutdownOptions {
   timeoutMs?: number;
@@ -27,14 +27,14 @@ export class GracefulShutdown {
       };
 
       try {
-        agent.emit('info', `DiagnosticAgent: ${signal} received — flushing telemetry`);
+        agent.emit("info", `DiagnosticAgent: ${signal} received — flushing telemetry`);
       } catch {
         // listener threw — proceed to flush anyway
       }
 
       const timer = setTimeout(() => {
         try {
-          agent.emit('info', 'DiagnosticAgent: flush timeout — exiting');
+          agent.emit("info", "DiagnosticAgent: flush timeout — exiting");
         } catch {
           // ignore
         }
@@ -54,7 +54,7 @@ export class GracefulShutdown {
       })();
     };
 
-    process.once('SIGTERM', () => shutdown('SIGTERM'));
-    process.once('SIGINT', () => shutdown('SIGINT'));
+    process.once("SIGTERM", () => shutdown("SIGTERM"));
+    process.once("SIGINT", () => shutdown("SIGINT"));
   }
 }

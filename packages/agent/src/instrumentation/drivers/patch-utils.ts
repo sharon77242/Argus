@@ -1,5 +1,5 @@
-import { safeChannel } from '../safe-channel.ts';
-import { AstSanitizer } from '../../sanitization/ast-sanitizer.ts';
+import { safeChannel } from "../safe-channel.ts";
+import { AstSanitizer } from "../../sanitization/ast-sanitizer.ts";
 
 const _sanitizer = new AstSanitizer();
 
@@ -12,7 +12,7 @@ export function serializeNoSqlQuery(arg: unknown): string {
   try {
     return JSON.stringify(_sanitizer.sanitizeDocument(arg));
   } catch {
-    return '[nosql-query]';
+    return "[nosql-query]";
   }
 }
 
@@ -20,7 +20,7 @@ export function serializeNoSqlQuery(arg: unknown): string {
  * The standard channel name that auto-patched drivers publish to.
  * The InstrumentationEngine subscribes to this by default.
  */
-export const AUTO_PATCH_CHANNEL = 'db.query.execution';
+export const AUTO_PATCH_CHANNEL = "db.query.execution";
 
 /**
  * Describes the shape of a message published on the diagnostics_channel
@@ -32,7 +32,6 @@ export interface PatchedQueryMessage {
   driver: string;
   error?: unknown;
 }
-
 
 type AnyTarget = any;
 type AnyFn = (...args: unknown[]) => unknown;
@@ -48,7 +47,7 @@ export interface PatchRecord {
 
 export const activePatches: PatchRecord[] = [];
 
-export const PATCHED_SYMBOL = Symbol.for('diagnostic-agent.patched');
+export const PATCHED_SYMBOL = Symbol.for("diagnostic-agent.patched");
 
 export function isAlreadyPatched(target: AnyTarget, methodName: string): boolean {
   return (target[methodName] as Record<symbol, unknown>)[PATCHED_SYMBOL] === true;
@@ -83,14 +82,16 @@ export function wrapMethod(
     const queryArgAsObj = queryArg as Record<string, unknown> | null;
     const queryText: string = serializeQuery
       ? serializeQuery(queryArg)
-      : typeof queryArg === 'string'
+      : typeof queryArg === "string"
         ? queryArg
-        : typeof queryArgAsObj?.text === 'string'
+        : typeof queryArgAsObj?.text === "string"
           ? queryArgAsObj.text
-          : queryArg != null ? String(queryArg as string | number) : '';
+          : queryArg != null
+            ? String(queryArg as string | number)
+            : "";
 
     const lastArg = args[args.length - 1];
-    if (typeof lastArg === 'function') {
+    if (typeof lastArg === "function") {
       const originalCallback = lastArg as AnyFn;
       args[args.length - 1] = function (this: unknown, err: unknown, ...cbArgs: unknown[]) {
         const durationMs = performance.now() - start;
@@ -107,7 +108,12 @@ export function wrapMethod(
 
     const result = original.apply(this, args);
 
-    if (result && typeof result === 'object' && 'then' in result && typeof (result as Record<string, unknown>).then === 'function') {
+    if (
+      result &&
+      typeof result === "object" &&
+      "then" in result &&
+      typeof (result as Record<string, unknown>).then === "function"
+    ) {
       return (result as Promise<unknown>).then(
         (res) => {
           const durationMs = performance.now() - start;

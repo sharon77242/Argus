@@ -1,5 +1,5 @@
-import { EventEmitter } from 'node:events';
-import type { FixSuggestion } from '../analysis/types.ts';
+import { EventEmitter } from "node:events";
+import type { FixSuggestion } from "../analysis/types.ts";
 
 export interface ResourceLeakEvent {
   handlesCount: number;
@@ -27,9 +27,17 @@ export class ResourceLeakMonitor extends EventEmitter {
     this.alertCooldownMs = options.alertCooldownMs ?? 60_000;
   }
 
+  on(event: "leak", listener: (event: ResourceLeakEvent) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string | symbol, listener: (...args: any[]) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string | symbol, listener: (...args: any[]) => void): this {
+    return super.on(event, listener);
+  }
+
   public start(): void {
     if (this.timer) return;
-    
+
     this.timer = setInterval(() => this.check(), this.intervalMs);
     this.timer.unref(); // prevent blocking event loop from natural death
   }
@@ -43,7 +51,7 @@ export class ResourceLeakMonitor extends EventEmitter {
 
   private check(): void {
     // Only available in Node v20/v22+
-    if (typeof process.getActiveResourcesInfo !== 'function') {
+    if (typeof process.getActiveResourcesInfo !== "function") {
       return;
     }
 
@@ -58,14 +66,15 @@ export class ResourceLeakMonitor extends EventEmitter {
 
       const suggestions: FixSuggestion[] = [
         {
-          severity: 'critical',
-          rule: 'resource-exhaustion',
+          severity: "critical",
+          rule: "resource-exhaustion",
           message: `Process exceeded threshold of active OS handles/resources (${handlesCount} > ${this.handleThreshold}).`,
-          suggestedFix: 'Ensure DB connection pools are restricted, sockets use keep-alive appropriately, and file streams are explicitly closed.',
-        }
+          suggestedFix:
+            "Ensure DB connection pools are restricted, sockets use keep-alive appropriately, and file streams are explicitly closed.",
+        },
       ];
 
-      this.emit('leak', { handlesCount, suggestions });
+      this.emit("leak", { handlesCount, suggestions });
     }
   }
 }

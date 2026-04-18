@@ -1,5 +1,5 @@
-import { nodeRequire } from './_require.ts';
-import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
+import { nodeRequire } from "./_require.ts";
+import { isAlreadyPatched, wrapMethod } from "./patch-utils.ts";
 
 /**
  * better-sqlite3 uses a synchronous API — `Database.prototype.prepare`
@@ -8,22 +8,24 @@ import { isAlreadyPatched, wrapMethod } from './patch-utils.ts';
  */
 export function patchBetterSqlite3(): boolean {
   try {
-    const Database = nodeRequire('better-sqlite3');
+    const Database = nodeRequire("better-sqlite3");
     const proto = Database?.prototype;
     if (!proto) return false;
 
     let patched = false;
     // Patch exec (raw SQL execution)
-    if (proto.exec && !isAlreadyPatched(proto, 'exec')) {
-      wrapMethod(proto, 'exec', 'better-sqlite3');
+    if (proto.exec && !isAlreadyPatched(proto, "exec")) {
+      wrapMethod(proto, "exec", "better-sqlite3");
       patched = true;
     }
     // Patch prepare — the returned Statement has .run/.get/.all
-    if (proto.prepare && !isAlreadyPatched(proto, 'prepare')) {
-      wrapMethod(proto, 'prepare', 'better-sqlite3');
+    if (proto.prepare && !isAlreadyPatched(proto, "prepare")) {
+      wrapMethod(proto, "prepare", "better-sqlite3");
       patched = true;
     }
     return patched;
-  } catch { /* not installed */ }
+  } catch {
+    /* not installed */
+  }
   return false;
 }

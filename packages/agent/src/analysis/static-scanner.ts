@@ -1,7 +1,7 @@
-import { exec } from 'node:child_process';
-import { EventEmitter } from 'node:events';
-import { dirname } from 'node:path';
-import type { FixSuggestion, ScanResult } from './types.ts';
+import { exec } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { dirname } from "node:path";
+import type { FixSuggestion, ScanResult } from "./types.ts";
 
 // Minimal TypeScript Compiler API surface used by this scanner.
 // Defined locally so the `typescript` package resolves at runtime only (devDep),
@@ -29,25 +29,39 @@ interface TsProgram {
 }
 interface TsApi {
   sys: TsSystem;
-  findConfigFile(searchPath: string, fileExists: (path: string) => boolean, configName?: string): string | undefined;
-  readConfigFile(fileName: string, readFile: (path: string, encoding?: string) => string | undefined): { config?: unknown; error?: TsDiagnostic };
-  parseJsonConfigFileContent(json: unknown, host: TsSystem, basePath: string): { fileNames: string[]; options: Record<string, unknown> };
+  findConfigFile(
+    searchPath: string,
+    fileExists: (path: string) => boolean,
+    configName?: string,
+  ): string | undefined;
+  readConfigFile(
+    fileName: string,
+    readFile: (path: string, encoding?: string) => string | undefined,
+  ): { config?: unknown; error?: TsDiagnostic };
+  parseJsonConfigFileContent(
+    json: unknown,
+    host: TsSystem,
+    basePath: string,
+  ): { fileNames: string[]; options: Record<string, unknown> };
   createProgram(rootNames: string[], options: Record<string, unknown>): TsProgram;
-  flattenDiagnosticMessageText(messageText: string | TsDiagnosticMessageChain, newLine: string): string;
+  flattenDiagnosticMessageText(
+    messageText: string | TsDiagnosticMessageChain,
+    newLine: string,
+  ): string;
 }
 
 /**
  * Maps TypeScript diagnostic codes to severity levels.
  * Unknown codes default to 'info'.
  */
-function tsSeverity(code: string): FixSuggestion['severity'] {
+function tsSeverity(code: string): FixSuggestion["severity"] {
   // Critical: type errors that would crash at runtime
-  const critical = ['2304', '2322', '2345', '2554', '2769', '7006'];
+  const critical = ["2304", "2322", "2345", "2554", "2769", "7006"];
   // Warning: code quality issues
-  const warning = ['6133', '6196', '2839', '7034', '7005', '2532'];
-  if (critical.includes(code)) return 'critical';
-  if (warning.includes(code)) return 'warning';
-  return 'info';
+  const warning = ["6133", "6196", "2839", "7034", "7005", "2532"];
+  if (critical.includes(code)) return "critical";
+  if (warning.includes(code)) return "warning";
+  return "info";
 }
 
 /**
@@ -60,6 +74,14 @@ export class StaticScanner extends EventEmitter {
   constructor(targetDir: string) {
     super();
     this.targetDir = targetDir;
+  }
+
+  on(event: "scan", listener: (results: ScanResult[]) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string | symbol, listener: (...args: any[]) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string | symbol, listener: (...args: any[]) => void): this {
+    return super.on(event, listener);
   }
 
   /**
@@ -76,7 +98,7 @@ export class StaticScanner extends EventEmitter {
       results.push(eslintResult);
     }
 
-    this.emit('scan', results);
+    this.emit("scan", results);
     return results;
   }
 
@@ -93,7 +115,7 @@ export class StaticScanner extends EventEmitter {
       // available in dev/CI environments where withStaticScanner() is used.
       // A variable is used so TypeScript does not attempt static module resolution
       // (import(literal) would error when the package is not installed).
-      const tsId = 'typescript';
+      const tsId = "typescript";
       const tsModule: unknown = await import(tsId);
       const ts = ((tsModule as { default?: TsApi }).default ?? tsModule) as TsApi;
       return this.runTypeScriptAPI(ts, start);
@@ -103,52 +125,53 @@ export class StaticScanner extends EventEmitter {
     }
   }
 
-  private async runTypeScriptAPI(
-    ts: TsApi,
-    start: number,
-  ): Promise<ScanResult> {
-    const configPath = ts.findConfigFile(this.targetDir, ts.sys.fileExists, 'tsconfig.json');
+  private runTypeScriptAPI(ts: TsApi, start: number): ScanResult {
+    const configPath = ts.findConfigFile(
+      this.targetDir,
+      (p: string) => (ts.sys.fileExists as (path: string) => boolean)(p),
+      "tsconfig.json",
+    );
     if (!configPath) {
-      return { tool: 'tsc', totalIssues: 0, suggestions: [], durationMs: performance.now() - start };
-    }
-
-    const { config, error: readError } = ts.readConfigFile(configPath, ts.sys.readFile);
-    if (readError) {
-      const msg = ts.flattenDiagnosticMessageText(readError.messageText, '\n');
       return {
-        tool: 'tsc',
-        totalIssues: 1,
-        suggestions: [{ severity: 'warning', rule: 'tsconfig-read-error', message: msg }],
+        tool: "tsc",
+        totalIssues: 0,
+        suggestions: [],
         durationMs: performance.now() - start,
       };
     }
 
-    const parsed = ts.parseJsonConfigFileContent(
-      config as object,
-      ts.sys,
-      dirname(configPath),
+    const { config, error: readError } = ts.readConfigFile(configPath, (p: string, enc?: string) =>
+      (ts.sys.readFile as (path: string, encoding?: string) => string | undefined)(p, enc),
     );
+    if (readError) {
+      const msg = ts.flattenDiagnosticMessageText(readError.messageText, "\n");
+      return {
+        tool: "tsc",
+        totalIssues: 1,
+        suggestions: [{ severity: "warning", rule: "tsconfig-read-error", message: msg }],
+        durationMs: performance.now() - start,
+      };
+    }
+
+    const parsed = ts.parseJsonConfigFileContent(config as object, ts.sys, dirname(configPath));
 
     const program = ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true });
-    const diagnostics = [
-      ...program.getSyntacticDiagnostics(),
-      ...program.getSemanticDiagnostics(),
-    ];
+    const diagnostics = [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()];
 
     const suggestions: FixSuggestion[] = diagnostics
-      .filter(d => d.file !== undefined && d.start !== undefined)
-      .map(d => {
+      .filter((d) => d.file !== undefined && d.start !== undefined)
+      .map((d) => {
         const { line, character } = d.file!.getLineAndCharacterOfPosition(d.start!);
         return {
           severity: tsSeverity(String(d.code)),
           rule: `TS${d.code}`,
-          message: ts.flattenDiagnosticMessageText(d.messageText, ' '),
+          message: ts.flattenDiagnosticMessageText(d.messageText, " "),
           location: `${d.file!.fileName}:${line + 1}:${character + 1}`,
         };
       });
 
     return {
-      tool: 'tsc',
+      tool: "tsc",
       totalIssues: suggestions.length,
       suggestions,
       durationMs: performance.now() - start,
@@ -158,13 +181,13 @@ export class StaticScanner extends EventEmitter {
   private async runTypeScriptExec(start: number): Promise<ScanResult> {
     return new Promise((resolve) => {
       exec(
-        'npx tsc --noEmit --pretty false',
+        "npx tsc --noEmit --pretty false",
         { cwd: this.targetDir, timeout: 30_000, maxBuffer: 5 * 1024 * 1024 },
         (_error, stdout, stderr) => {
           const durationMs = performance.now() - start;
-          const output = (stdout || '') + (stderr || '');
+          const output = (stdout || "") + (stderr || "");
           const suggestions = this.parseTypeScriptOutput(output);
-          resolve({ tool: 'tsc', totalIssues: suggestions.length, suggestions, durationMs });
+          resolve({ tool: "tsc", totalIssues: suggestions.length, suggestions, durationMs });
         },
       );
     });
@@ -178,12 +201,12 @@ export class StaticScanner extends EventEmitter {
 
     return new Promise((resolve) => {
       exec(
-        'npx eslint . --format json --no-error-on-unmatched-pattern',
+        "npx eslint . --format json --no-error-on-unmatched-pattern",
         { cwd: this.targetDir, timeout: 30_000, maxBuffer: 5 * 1024 * 1024 },
         (error, stdout) => {
           const durationMs = performance.now() - start;
 
-          if (!stdout.trim().startsWith('[')) {
+          if (!stdout.trim().startsWith("[")) {
             // ESLint not installed or no output
             resolve(null);
             return;
@@ -205,8 +228,8 @@ export class StaticScanner extends EventEmitter {
             for (const file of results) {
               for (const msg of file.messages) {
                 suggestions.push({
-                  severity: msg.severity >= 2 ? 'warning' : 'info',
-                  rule: msg.ruleId ?? 'eslint-unknown',
+                  severity: msg.severity >= 2 ? "warning" : "info",
+                  rule: msg.ruleId ?? "eslint-unknown",
                   message: msg.message,
                   location: `${file.filePath}:${msg.line}:${msg.column}`,
                 });
@@ -214,7 +237,7 @@ export class StaticScanner extends EventEmitter {
             }
 
             resolve({
-              tool: 'eslint',
+              tool: "eslint",
               totalIssues: suggestions.length,
               suggestions,
               durationMs,
@@ -237,7 +260,15 @@ export class StaticScanner extends EventEmitter {
 
     let match;
     while ((match = regex.exec(output)) !== null) {
-      const [, filePath, line, col, , code, message] = match as [string, string, string, string, string, string, string];
+      const [, filePath, line, col, , code, message] = match as [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
       suggestions.push({
         severity: tsSeverity(code),
         rule: `TS${code}`,

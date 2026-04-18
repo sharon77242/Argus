@@ -70,7 +70,7 @@ export class SourceMapResolver {
 
     try {
       const mapContent = await fs.promises.readFile(mapPath, "utf8");
-      const rawMap: RawSourceMap = JSON.parse(mapContent);
+      const rawMap = JSON.parse(mapContent) as RawSourceMap;
       const consumer = await new SourceMapConsumer(rawMap);
       this.mapCache.set(filePath, consumer);
       return consumer;

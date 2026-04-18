@@ -11,7 +11,7 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
-    files: ["src/**/*.ts", "tests/**/*.ts"],
+    files: ["packages/**/*.ts"],
 
     rules: {
       // Style preferences
@@ -31,7 +31,19 @@ export default tseslint.config(
     },
   },
   {
-    files: ["tests/**/*.ts"],
+    // Driver files use dynamic imports for optional peer deps — any is intentional.
+    files: ["packages/**/instrumentation/drivers/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+    },
+  },
+  {
+    files: ["packages/**/tests/**/*.ts"],
     rules: {
       // Tests use `any` extensively for mocking, private-field access, and event destructuring.
       // Enforce type safety in src instead (these rules are active there by default).
@@ -59,6 +71,6 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["node_modules/", "dist/", "*.config.*", "quotes-demo-app/", "scripts/"],
+    ignores: ["**/node_modules/", "**/dist/", "*.config.*", "quotes-demo-app/", "scripts/"],
   },
 );

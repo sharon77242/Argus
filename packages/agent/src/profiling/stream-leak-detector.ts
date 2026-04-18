@@ -1,9 +1,9 @@
-import { EventEmitter } from 'node:events';
-import { Readable } from 'node:stream';
-import { getDiagnosticsChannel } from '../instrumentation/safe-channel.ts';
+import { EventEmitter } from "node:events";
+import { type Readable } from "node:stream";
+import { getDiagnosticsChannel } from "../instrumentation/safe-channel.ts";
 
 export interface StreamLeakEvent {
-  type: 'stream-leak';
+  type: "stream-leak";
   aliveSinceMs: number;
   thresholdMs: number;
   stack?: string;
@@ -57,9 +57,9 @@ export class StreamLeakDetector extends EventEmitter {
 
     try {
       const dc = getDiagnosticsChannel();
-      if (!dc) throw new Error('unavailable');
-      const createChannel = dc.channel('stream.create');
-      const destroyChannel = dc.channel('stream.destroy');
+      if (!dc) throw new Error("unavailable");
+      const createChannel = dc.channel("stream.create");
+      const destroyChannel = dc.channel("stream.destroy");
 
       createChannel.subscribe((msg: unknown) => {
         const stream = (msg as { stream?: object }).stream;
@@ -107,16 +107,18 @@ export class StreamLeakDetector extends EventEmitter {
     this.liveStreams.set(stream, record);
     this.trackedRefs.push(stream);
 
-    const markConsumed = () => { record.consumed = true; };
-    stream.once('data', markConsumed);
-    stream.once('readable', markConsumed);
-    stream.once('end', markConsumed);
-    stream.once('close', () => {
+    const markConsumed = () => {
+      record.consumed = true;
+    };
+    stream.once("data", markConsumed);
+    stream.once("readable", markConsumed);
+    stream.once("end", markConsumed);
+    stream.once("close", () => {
       this.liveStreams.delete(stream);
       const idx = this.trackedRefs.indexOf(stream);
       if (idx !== -1) this.trackedRefs.splice(idx, 1);
     });
-    stream.once('pipe', markConsumed);
+    stream.once("pipe", markConsumed);
   }
 
   private _checkLeaks(): void {
@@ -132,8 +134,8 @@ export class StreamLeakDetector extends EventEmitter {
 
       const aliveMs = now - tracked.createdAt;
       if (aliveMs >= this.thresholdMs) {
-        this.emit('leak', {
-          type: 'stream-leak',
+        this.emit("leak", {
+          type: "stream-leak",
           aliveSinceMs: aliveMs,
           thresholdMs: this.thresholdMs,
           stack: tracked.stack,

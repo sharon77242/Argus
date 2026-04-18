@@ -71,6 +71,33 @@ export class RuntimeMonitor extends EventEmitter {
     this.elMonitor.enable();
   }
 
+  on(event: "anomaly", listener: (event: ProfilerEvent) => void): this;
+  on(event: "error", listener: (err: Error) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string | symbol, listener: (...args: any[]) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: string | symbol, listener: (...args: any[]) => void): this {
+    return super.on(event, listener);
+  }
+
+  emit(event: "anomaly", event_: ProfilerEvent): boolean;
+  emit(event: "error", err: Error): boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  emit(event: string | symbol, ...args: any[]): boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  emit(event: string | symbol, ...args: any[]): boolean {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    return super.emit(event, ...args);
+  }
+
+  off(event: "anomaly", listener: (event: ProfilerEvent) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  off(event: string | symbol, listener: (...args: any[]) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  off(event: string | symbol, listener: (...args: any[]) => void): this {
+    return super.off(event, listener);
+  }
+
   public start(): void {
     if (this.intervalTimer) return;
 
@@ -127,9 +154,9 @@ export class RuntimeMonitor extends EventEmitter {
             const snapshot = getHeapSnapshot();
             const file = createWriteStream(snapPath);
             snapshot.pipe(file);
-            file.once('finish', resolve);
-            file.once('error', reject);
-            snapshot.once('error', reject);
+            file.once("finish", resolve);
+            file.once("error", reject);
+            snapshot.once("error", reject);
           });
           heapSnapshotPath = snapPath;
         } catch (e) {
@@ -197,21 +224,21 @@ export class RuntimeMonitor extends EventEmitter {
       if (!this.inspectorSession) return resolve(null);
       const session = this.inspectorSession;
 
-      session.post('Profiler.enable', (enableErr) => {
+      session.post("Profiler.enable", (enableErr) => {
         if (enableErr) return reject(enableErr);
         if (!this.inspectorSession) return resolve(null);
 
-        session.post('Profiler.start', (startErr) => {
+        session.post("Profiler.start", (startErr) => {
           if (startErr) return reject(startErr);
           if (!this.inspectorSession) return resolve(null);
 
           setTimeout(() => {
             if (!this.inspectorSession) return resolve(null);
 
-            session.post('Profiler.stop', (stopErr, res) => {
+            session.post("Profiler.stop", (stopErr, res) => {
               if (!this.inspectorSession) return resolve(null);
 
-              session.post('Profiler.disable', (disableErr) => {
+              session.post("Profiler.disable", (disableErr) => {
                 if (stopErr) return reject(stopErr);
                 if (disableErr) return reject(disableErr);
                 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
