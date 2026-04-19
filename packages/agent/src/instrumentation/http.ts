@@ -3,7 +3,7 @@ import https from "node:https";
 import { EventEmitter } from "node:events";
 import { HttpAnalyzer } from "../analysis/http-analyzer.ts";
 import type { FixSuggestion } from "../analysis/types.ts";
-import { getCurrentContext } from "./correlation.ts";
+import { getCurrentContext, makeTraceparent } from "./correlation.ts";
 import { safeChannel, supportsHttpDiagnosticsChannel } from "./safe-channel.ts";
 
 export interface TracedHttpRequest {
@@ -16,6 +16,8 @@ export interface TracedHttpRequest {
   timestamp: number;
   suggestions?: FixSuggestion[];
   correlationId?: string;
+  /** W3C trace-id — present when the request executes inside a runWithContext() scope. */
+  traceId?: string;
 }
 
 export class HttpInstrumentation extends EventEmitter {
@@ -53,7 +55,18 @@ export class HttpInstrumentation extends EventEmitter {
     start: number,
   ): void {
     const sourceLine = this.getSourceLine();
-    const correlationId = getCurrentContext()?.requestId;
+    const ctx = getCurrentContext();
+    const correlationId = ctx?.requestId;
+    const traceId = ctx?.traceId;
+
+    // Propagate W3C TraceContext on outbound requests when a context is active
+    if (ctx) {
+      try {
+        req.setHeader("traceparent", makeTraceparent(ctx.traceId, ctx.spanId));
+      } catch {
+        // Request may already be sent (e.g. in the channel path) — best-effort
+      }
+    }
 
     const onEnd = (statusCode?: number, errMessage?: string): void => {
       const durationMs = performance.now() - start;
@@ -68,6 +81,7 @@ export class HttpInstrumentation extends EventEmitter {
         timestamp: Date.now(),
         suggestions: suggestions.length > 0 ? suggestions : undefined,
         correlationId,
+        traceId,
       } satisfies TracedHttpRequest);
     };
 

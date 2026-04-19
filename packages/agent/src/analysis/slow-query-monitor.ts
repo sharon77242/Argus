@@ -5,6 +5,8 @@ export interface SlowQueryRecord {
   timestamp: number;
   sourceLine?: string;
   correlationId?: string;
+  /** W3C trace-id — present when the query ran inside a runWithContext() scope. */
+  traceId?: string;
   /** The threshold that was exceeded, in ms. */
   thresholdMs: number;
 }
@@ -139,6 +141,7 @@ export class SlowQueryMonitor {
     timestamp: number,
     sourceLine?: string,
     correlationId?: string,
+    traceId?: string,
   ): SlowQueryRecord | null {
     const thresholdMs = this.getThreshold(driver);
     if (durationMs < thresholdMs) return null;
@@ -150,6 +153,7 @@ export class SlowQueryMonitor {
       timestamp,
       sourceLine,
       correlationId,
+      traceId,
       thresholdMs,
     };
     this.addToSlowLog(record);

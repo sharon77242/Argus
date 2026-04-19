@@ -11,6 +11,8 @@ export interface TracedQuery {
   sourceLine?: string;
   timestamp: number;
   correlationId?: string;
+  /** W3C trace-id — present when the query executes inside a runWithContext() scope. */
+  traceId?: string;
 }
 
 export interface InstrumentationOptions {
@@ -78,37 +80,43 @@ export class InstrumentationEngine extends EventEmitter {
       const result = await executeFn();
       const durationMs = performance.now() - start;
 
+      const ctx = getCurrentContext();
       const traced: TracedQuery = {
         sanitizedQuery: this.sanitizeQuery(query),
         durationMs,
         sourceLine,
         timestamp: Date.now(),
-        correlationId: getCurrentContext()?.requestId,
+        correlationId: ctx?.requestId,
+        traceId: ctx?.traceId,
       };
 
       this.emit("query", traced);
       return result;
     } catch (err) {
       const durationMs = performance.now() - start;
+      const ctx = getCurrentContext();
       this.emit("query", {
         sanitizedQuery: this.sanitizeQuery(query) + " [FAILED]",
         durationMs,
         sourceLine,
         timestamp: Date.now(),
-        correlationId: getCurrentContext()?.requestId,
+        correlationId: ctx?.requestId,
+        traceId: ctx?.traceId,
       } satisfies TracedQuery);
       throw err;
     }
   }
 
   public processQueryDetails(rawQuery: string, durationMs: number, driver?: string): TracedQuery {
+    const ctx = getCurrentContext();
     return {
       sanitizedQuery: this.sanitizeQuery(rawQuery),
       durationMs,
       driver,
       sourceLine: this.extractSourceLine(),
       timestamp: Date.now(),
-      correlationId: getCurrentContext()?.requestId,
+      correlationId: ctx?.requestId,
+      traceId: ctx?.traceId,
     };
   }
 
