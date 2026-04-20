@@ -2,6 +2,8 @@
 
 > **Privacy-first performance diagnostics for Node.js — minimum Node 14.18 as a compiled package, Node 22.6 for source/dev mode**
 
+![Argus demo](https://raw.githubusercontent.com/sharon77242/Argus/master/docs/demo.gif)
+
 A lightweight agent that embeds directly into your application — silently tracking runtime behaviour, isolating bottlenecks, and mathematically sanitizing all context before exporting OpenTelemetry (OTLP) telemetry to your observability stack.
 
 ---
@@ -699,7 +701,7 @@ const suggestions = cbd.analyze(recentQueryEvents);
 > [!IMPORTANT]
 > **OTLP export requires a paid Self-Hosted Pro or Enterprise license.**
 > In free mode the agent emits events locally via `EventEmitter` only — `.withExporter()` has no effect without a valid `DIAGNOSTIC_LICENSE_KEY`.
-> To get notified when Self-Hosted Pro licenses go on sale: open [this GitHub issue](https://github.com/YOUR_ORG/YOUR_REPO/issues/YOUR_ISSUE) or email [sharon10vp614@gmail.com](mailto:sharon10vp614@gmail.com).
+> To get notified when Self-Hosted Pro licenses go on sale: open [this GitHub issue](https://github.com/sharon77242/Argus/issues) or email [sharon10vp614@gmail.com](mailto:sharon10vp614@gmail.com).
 
 The Self-Hosted Pro tier exports standard OTLP JSON directly to your own collector — no data ever leaves your infrastructure. Any OTLP-compatible collector works. Below is the quickest local setup using Jaeger's all-in-one image.
 
@@ -755,7 +757,7 @@ Local suggestions fire today with zero account required.
 A hosted dashboard with 30-day query history, AI-powered fix suggestions,
 and cross-service correlation is in development.
 
-→ Subscribe via [this GitHub issue](https://github.com/YOUR_ORG/YOUR_REPO/issues/YOUR_ISSUE) or email [sharon10vp614@gmail.com](mailto:sharon10vp614@gmail.com) to be notified at launch.
+→ Subscribe via [this GitHub issue](https://github.com/sharon77242/Argus/issues) or email [sharon10vp614@gmail.com](mailto:sharon10vp614@gmail.com) to be notified at launch.
 
 ---
 
