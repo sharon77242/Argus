@@ -13,6 +13,8 @@ export interface TracedQuery {
   correlationId?: string;
   /** W3C trace-id — present when the query executes inside a runWithContext() scope. */
   traceId?: string;
+  /** True = cache hit, false = cache miss. Only present for drivers that supply captureHit (e.g. Redis). */
+  cacheHit?: boolean;
 }
 
 export interface InstrumentationOptions {
@@ -52,7 +54,8 @@ export class InstrumentationEngine extends EventEmitter {
       if (typeof msg.query === "string") {
         const duration = typeof msg.durationMs === "number" ? msg.durationMs : 0;
         const driver = typeof msg.driver === "string" ? msg.driver : undefined;
-        this.emit("query", this.processQueryDetails(msg.query, duration, driver));
+        const cacheHit = typeof msg.cacheHit === "boolean" ? msg.cacheHit : undefined;
+        this.emit("query", this.processQueryDetails(msg.query, duration, driver, cacheHit));
       }
     });
   }
@@ -107,7 +110,12 @@ export class InstrumentationEngine extends EventEmitter {
     }
   }
 
-  public processQueryDetails(rawQuery: string, durationMs: number, driver?: string): TracedQuery {
+  public processQueryDetails(
+    rawQuery: string,
+    durationMs: number,
+    driver?: string,
+    cacheHit?: boolean,
+  ): TracedQuery {
     const ctx = getCurrentContext();
     return {
       sanitizedQuery: this.sanitizeQuery(rawQuery),
@@ -117,6 +125,7 @@ export class InstrumentationEngine extends EventEmitter {
       timestamp: Date.now(),
       correlationId: ctx?.requestId,
       traceId: ctx?.traceId,
+      cacheHit,
     };
   }
 

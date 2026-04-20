@@ -154,6 +154,7 @@ This section tracks planned monitoring capabilities — what's already shipped, 
 |---|---|---|
 | Event-loop lag detection | `RuntimeMonitor` | Fires `anomaly` when lag > threshold |
 | Memory leak detection | `RuntimeMonitor` | Accumulated-growth model (3 consecutive ticks) |
+| Heap OOM-risk detection | `RuntimeMonitor` | `heapUsed/heapTotal >= threshold` for 2 ticks → snapshot |
 | Crash telemetry flush | `CrashGuard` | `uncaughtException` → flush → `exit(1)` |
 | OS handle / TCP leak detection | `ResourceLeakMonitor` | `process.getActiveResourcesInfo()` delta |
 | DB query tracing (16 drivers) | `InstrumentationEngine` + driver patches | Via `diagnostics_channel` |
@@ -167,48 +168,31 @@ This section tracks planned monitoring capabilities — what's already shipped, 
 | Worker thread queue depth | `WorkerThreadsMonitor` | Queue depth and slow-task anomalies |
 | Stream leak detection | `StreamLeakDetector` | Readable streams never consumed |
 | Slow `require()` detection | `SlowRequireDetector` | `diagnostics_channel` `module.cjs.load.*` |
+| GC pressure monitoring | `GcMonitor` | `PerformanceObserver` on `gc` entries, sliding window |
+| Connection pool monitoring | `PoolMonitor` | Exhaustion + slow-acquire via `acquire` event + polling |
+| Distributed tracing (W3C TraceContext) | `correlation.ts` + `HttpInstrumentation` | `traceparent` propagation, `AsyncLocalStorage` |
+| Transaction duration monitoring | `TransactionMonitor` | BEGIN/COMMIT/ROLLBACK detection, per-trace isolation |
+| Cache hit-rate monitoring | `CacheMonitor` | Sliding-window hit rate, fires `cache-degraded` |
+| Query plan analysis (EXPLAIN) | `ExplainAnalyzer` | User-supplied executor, per-pattern cooldown |
+| DNS resolution monitoring | `DnsMonitor` | `dns.lookup` intercept, `slow-dns` events |
+| Adaptive sampling | `AdaptiveSampler` | Token-bucket per category, wired in `DiagnosticAgent` |
+| OTLP-compatible export (no mTLS) | `OTLPCompatibleExporter` | Plain http/https, optional bearer token |
 
 ---
 
 ### Near-term (low effort, high value)
 
-**Connection pool monitoring**
-Track the time queries spend waiting for a pool slot separately from query execution time. Surface pool saturation (`waiting > N`) as a distinct event. Most pg/mysql2 pool libraries already emit events — wire a `patchPool(pool)` helper that subscribes to `acquire`, `release`, and `remove`.
-
-**Transaction duration monitoring**
-Detect long-running or rolled-back transactions. Add a `TransactionMonitor` that hooks `BEGIN`/`COMMIT`/`ROLLBACK` on the same channels the driver patches already use. Emit `slow-transaction` when a transaction exceeds a configurable threshold (default: 5 s).
-
-**GC pressure monitoring**
-Use `node:v8` `PerformanceObserver` on `gc` entries to track pause times and frequency. Surface `gc-pressure` events when total GC time in a window exceeds a configurable percentage of wall time (default: 10%). No native modules required — pure JS.
-
-**Cache hit-rate monitoring**
-For Redis and Memcached drivers, track `GET` commands that return `null` vs. non-null. Emit a rolling `cache-miss-rate` metric. Integrate with `SlowQueryMonitor`'s per-driver threshold model so a miss-rate spike triggers a `slow-query`-style event.
+All near-term items are now shipped. See the Shipped table above.
 
 ---
 
 ### Medium-term (moderate effort)
 
-**Query plan analysis (EXPLAIN integration)**
-Automatically `EXPLAIN` queries that exceed the slow-query threshold on PostgreSQL and MySQL. Parse the plan to detect full table scans, missing indexes, and nested-loop explosions. Attach a `queryPlan` field to `SlowQueryRecord` and emit it in the `slow-query` event. Gate behind an opt-in flag (`withSlowQueryMonitor({ explainThresholdMs: 2000 })`) because EXPLAIN adds a round-trip.
-
-**Distributed tracing (W3C TraceContext)**
-Propagate `traceparent` / `tracestate` headers on outgoing HTTP requests and read them on incoming ones. Store the active span in `AsyncLocalStorage` so every `TracedQuery`, `SlowQueryRecord`, and `ProfilerEvent` carries a `traceId`. Export spans as OTLP traces alongside the existing OTLP metrics. This composes with the existing `correlationId` field — `traceId` replaces it end-to-end.
-
-**DNS resolution monitoring**
-Wrap `dns.resolve*` and `dns.lookup` to track lookup times. Emit `slow-dns` events when lookups exceed a threshold (default: 200 ms). Detect repeated failures and emit a `dns-error-rate` metric. Most latency investigations eventually reveal a DNS issue — having this in the same telemetry stream saves a lot of manual cross-referencing.
-
-**Heap snapshot on OOM-approach**
-When `heapUsed / heapTotal` exceeds 90% for two consecutive ticks, write a V8 heap snapshot to a temp file via `v8.writeHeapSnapshot()` and emit a `heap-snapshot` event with the path. Guard behind a cooldown (1 snapshot per 10 min) to avoid cascading I/O. Pairs with `SourceMapResolver` so the snapshot can be symbolicated.
+All medium-term items are now shipped. See the Shipped table above.
 
 ---
 
 ### Longer-term (architectural changes)
-
-**OpenTelemetry SDK bridge**
-Export all events as proper OTel spans, metrics, and logs rather than the current custom OTLP JSON format. This lets users plug any OTel-compatible backend (Jaeger, Tempo, Honeycomb, Datadog) without a custom collector. The internal event model stays the same; only the `OTLPExporter` layer changes.
-
-**Adaptive sampling**
-When query volume is high, automatically downsample routine queries and always capture slow/failed ones at 100%. Store the sampling decision in `TracedQuery.sampleRate` so downstream systems can correct for it. Use a token-bucket per driver so bursts don't flood the exporter.
 
 **Browser / edge runtime support**
 The current architecture assumes Node.js APIs (`diagnostics_channel`, `process`, `node:v8`). A thin adapter layer could replace these with browser-compatible primitives (`PerformanceObserver`, `fetch` hooks) and ship a `@argus/browser` package that reuses the sanitization, analysis, and export layers unchanged.

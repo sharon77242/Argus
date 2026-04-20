@@ -31,6 +31,8 @@ export interface PatchedQueryMessage {
   durationMs: number;
   driver: string;
   error?: unknown;
+  /** True = cache hit, false = cache miss. Only present when the driver patch supplies a captureHit fn. */
+  cacheHit?: boolean;
 }
 
 type AnyTarget = any;
@@ -63,12 +65,15 @@ export function isAlreadyPatched(target: AnyTarget, methodName: string): boolean
  * @param serializeQuery  Optional serializer for the first argument.
  *   Supply `serializeNoSqlQuery` for NoSQL drivers whose queries are objects
  *   rather than strings. Defaults to SQL-style text extraction.
+ * @param captureHit  Optional function that inspects the result and returns
+ *   true for a cache hit, false for a miss. Pass `(r) => r !== null` for Redis GET.
  */
 export function wrapMethod(
   target: AnyTarget,
   methodName: string,
   driverName: string,
   serializeQuery?: (arg: unknown) => string,
+  captureHit?: (result: unknown) => boolean,
 ): void {
   if (isAlreadyPatched(target, methodName)) return;
 
@@ -95,11 +100,13 @@ export function wrapMethod(
       const originalCallback = lastArg as AnyFn;
       args[args.length - 1] = function (this: unknown, err: unknown, ...cbArgs: unknown[]) {
         const durationMs = performance.now() - start;
+        const cacheHit = !err && captureHit ? captureHit(cbArgs[0]) : undefined;
         channel.publish({
           query: queryText,
           durationMs,
           driver: driverName,
           error: err ?? undefined,
+          cacheHit,
         } satisfies PatchedQueryMessage);
         return originalCallback.call(this, err, ...cbArgs) as unknown;
       };
@@ -117,10 +124,12 @@ export function wrapMethod(
       return (result as Promise<unknown>).then(
         (res) => {
           const durationMs = performance.now() - start;
+          const cacheHit = captureHit ? captureHit(res) : undefined;
           channel.publish({
             query: queryText,
             durationMs,
             driver: driverName,
+            cacheHit,
           } satisfies PatchedQueryMessage);
           return res;
         },
@@ -138,10 +147,12 @@ export function wrapMethod(
     }
 
     const durationMs = performance.now() - start;
+    const cacheHit = captureHit ? captureHit(result) : undefined;
     channel.publish({
       query: queryText,
       durationMs,
       driver: driverName,
+      cacheHit,
     } satisfies PatchedQueryMessage);
     return result;
   };
@@ -163,7 +174,8 @@ export function patchMethod(
   methodName: string,
   driverName: string,
   serializeQuery?: (arg: unknown) => string,
+  captureHit?: (result: unknown) => boolean,
 ): void {
   if (isAlreadyPatched(target, methodName)) return;
-  wrapMethod(target, methodName, driverName, serializeQuery);
+  wrapMethod(target, methodName, driverName, serializeQuery, captureHit);
 }

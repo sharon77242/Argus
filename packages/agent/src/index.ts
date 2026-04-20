@@ -8,6 +8,8 @@ export * from "./profiling/graceful-shutdown.ts";
 export * from "./profiling/worker-threads-monitor.ts";
 export * from "./profiling/slow-require-detector.ts";
 export * from "./profiling/stream-leak-detector.ts";
+export * from "./profiling/gc-monitor.ts";
+export * from "./profiling/pool-monitor.ts";
 
 // Instrumentation
 export * from "./instrumentation/engine.ts";
@@ -16,6 +18,8 @@ export * from "./instrumentation/http.ts";
 export * from "./instrumentation/fs.ts";
 export * from "./instrumentation/logger.ts";
 export * from "./instrumentation/correlation.ts";
+export * from "./instrumentation/dns-monitor.ts";
+export * from "./instrumentation/adaptive-sampler.ts";
 
 // Sanitization
 export * from "./sanitization/ast-sanitizer.ts";
@@ -24,6 +28,7 @@ export * from "./sanitization/entropy-checker.ts";
 // Export
 export * from "./export/aggregator.ts";
 export * from "./export/exporter.ts";
+export * from "./export/otlp-compatible-exporter.ts";
 
 // Analysis
 export * from "./analysis/types.ts";
@@ -34,6 +39,10 @@ export * from "./analysis/log-analyzer.ts";
 export * from "./analysis/fs-analyzer.ts";
 export * from "./analysis/audit-scanner.ts";
 export * from "./analysis/circuit-breaker-detector.ts";
+export * from "./analysis/slow-query-monitor.ts";
+export * from "./analysis/transaction-monitor.ts";
+export * from "./analysis/cache-monitor.ts";
+export * from "./analysis/explain-analyzer.ts";
 
 // Licensing
 export * from "./licensing/public-key.ts";

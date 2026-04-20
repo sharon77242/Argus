@@ -13,12 +13,20 @@ export interface RuntimeMonitorOptions {
   cpuProfileCooldownMs?: number;
   checkIntervalMs?: number;
   cpuProfileDurationMs?: number;
+  /**
+   * Fire 'heap-oom-risk' and capture a heap snapshot when
+   * heapUsed / heapTotal exceeds this percentage for 2 consecutive ticks.
+   * Range 0–100. Default: 90.  Set to 0 to disable.
+   */
+  heapUsagePctThreshold?: number;
 }
 
 export interface ProfilerEvent {
-  type: "event-loop-lag" | "memory-leak";
+  type: "event-loop-lag" | "memory-leak" | "heap-oom-risk";
   lagMs?: number;
   growthBytes?: number;
+  /** Heap usage percentage (0–100) when a heap-oom-risk event fires. */
+  heapUsagePct?: number;
   profileDataPath?: string; // Path to the saved CPU profile
   heapSnapshotPath?: string; // Path to the saved heap snapshot
   timestamp: number;
@@ -44,6 +52,9 @@ export class RuntimeMonitor extends EventEmitter {
   // exceeding the threshold before firing — catches both spike and slow-burn leaks.
   private static readonly GROWTH_TICKS_REQUIRED = 3;
 
+  private consecutiveHighHeapTicks = 0;
+  private static readonly HIGH_HEAP_TICKS_REQUIRED = 2;
+
   private inspectorSession: Session | null = null;
   private isProfiling = false;
 
@@ -65,6 +76,9 @@ export class RuntimeMonitor extends EventEmitter {
       cpuProfileDurationMs:
         options.cpuProfileDurationMs ??
         safePositiveInt(process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS, 500),
+      heapUsagePctThreshold:
+        options.heapUsagePctThreshold ??
+        safePositiveInt(process.env.RUNTIME_MONITOR_HEAP_USAGE_PCT_THRESHOLD, 90),
     };
 
     this.elMonitor = monitorEventLoopDelay({ resolution: 10 });
@@ -176,6 +190,22 @@ export class RuntimeMonitor extends EventEmitter {
       this.baselineMemoryUsage = currentMemory;
     }
     this.lastMemoryUsage = currentMemory; // Track per-tick delta
+
+    // 3. Heap OOM-Risk Detection
+    const heapThreshold = this.options.heapUsagePctThreshold!;
+    if (heapThreshold > 0) {
+      const { heapUsed, heapTotal } = process.memoryUsage();
+      const heapUsagePct = heapTotal > 0 ? (heapUsed / heapTotal) * 100 : 0;
+      if (heapUsagePct >= heapThreshold) {
+        this.consecutiveHighHeapTicks++;
+        if (this.consecutiveHighHeapTicks >= RuntimeMonitor.HIGH_HEAP_TICKS_REQUIRED) {
+          this.consecutiveHighHeapTicks = 0;
+          await this.handleHeapOomRisk(heapUsagePct);
+        }
+      } else {
+        this.consecutiveHighHeapTicks = 0;
+      }
+    }
   }
 
   private async handleEventLoopLag(lagMs: number): Promise<void> {
@@ -217,6 +247,36 @@ export class RuntimeMonitor extends EventEmitter {
     } finally {
       this.isProfiling = false;
     }
+  }
+
+  /** Test helper — directly fire the heap-oom-risk logic without waiting for a real threshold. */
+  async _injectHighHeap(heapUsagePct: number): Promise<void> {
+    await this.handleHeapOomRisk(heapUsagePct);
+  }
+
+  private async handleHeapOomRisk(heapUsagePct: number): Promise<void> {
+    const snapPath = join(tmpdir(), `heap-oom-${Date.now()}.heapsnapshot`);
+    let heapSnapshotPath: string | undefined;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const snapshot = getHeapSnapshot();
+        const file = createWriteStream(snapPath);
+        snapshot.pipe(file);
+        file.once("finish", resolve);
+        file.once("error", reject);
+        snapshot.once("error", reject);
+      });
+      heapSnapshotPath = snapPath;
+    } catch (e) {
+      this.emit("error", e);
+    }
+
+    this.emit("anomaly", {
+      type: "heap-oom-risk",
+      heapUsagePct,
+      heapSnapshotPath,
+      timestamp: Date.now(),
+    } satisfies ProfilerEvent);
   }
 
   private captureCpuProfile(): Promise<unknown> {

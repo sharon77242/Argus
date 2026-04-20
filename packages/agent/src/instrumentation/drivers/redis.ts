@@ -5,7 +5,7 @@ export function patchIoredis(): boolean {
   try {
     const IORedis = nodeRequire("ioredis");
     if (IORedis?.prototype?.sendCommand && !isAlreadyPatched(IORedis.prototype, "sendCommand")) {
-      wrapMethod(IORedis.prototype, "sendCommand", "ioredis");
+      wrapMethod(IORedis.prototype, "sendCommand", "ioredis", undefined, (r) => r !== null);
       return true;
     }
   } catch {
@@ -20,7 +20,7 @@ export function patchNodeRedis(): boolean {
     const clientProto =
       redis.RedisClient?.prototype ?? redis.createClient?.()?.constructor?.prototype;
     if (clientProto?.sendCommand && !isAlreadyPatched(clientProto, "sendCommand")) {
-      wrapMethod(clientProto, "sendCommand", "redis");
+      wrapMethod(clientProto, "sendCommand", "redis", undefined, (r) => r !== null);
       return true;
     }
   } catch {

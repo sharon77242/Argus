@@ -19,6 +19,10 @@ import { SlowQueryMonitor, type SlowQueryOptions, type SlowQueryRecord } from ".
 import { GcMonitor, type GcMonitorOptions, type GcPressureEvent } from "./profiling/gc-monitor.ts";
 import { PoolMonitor, type PoolMonitorOptions, type PoolLike, type PoolExhaustionEvent, type SlowAcquireEvent } from "./profiling/pool-monitor.ts";
 import { createRequestContext, runWithContext, type RequestContext } from "./instrumentation/correlation.ts";
+import { TransactionMonitor, type TransactionMonitorOptions, type TransactionEvent } from "./analysis/transaction-monitor.ts";
+import { CacheMonitor, type CacheMonitorOptions } from "./analysis/cache-monitor.ts";
+import { DnsMonitor, type DnsMonitorOptions } from "./instrumentation/dns-monitor.ts";
+import { AdaptiveSampler, type AdaptiveSamplerOptions } from "./instrumentation/adaptive-sampler.ts";
 import { StaticScanner } from "./analysis/static-scanner.ts";
 import { HttpInstrumentation } from "./instrumentation/http.ts";
 import { FsInstrumentation } from "./instrumentation/fs.ts";
@@ -92,6 +96,10 @@ export class DiagnosticAgent extends EventEmitter {
   private slowQueryOptions: SlowQueryOptions | null = null;
   private gcMonitorOptions: GcMonitorOptions | null = null;
   private poolMonitorOptions: PoolMonitorOptions | null = null;
+  private transactionMonitorOptions: TransactionMonitorOptions | null = null;
+  private cacheMonitorOptions: CacheMonitorOptions | null = null;
+  private dnsMonitorOptions: DnsMonitorOptions | null = null;
+  private adaptiveSamplerOptions: AdaptiveSamplerOptions | null = null;
   private staticScanDir: string | null = null;
   private httpTracingEnabled = false;
   private fsTracingEnabled = false;
@@ -111,6 +119,10 @@ export class DiagnosticAgent extends EventEmitter {
   private slowQueryMonitor: SlowQueryMonitor | null = null;
   private gcMonitor: GcMonitor | null = null;
   private poolMonitor: PoolMonitor | null = null;
+  private transactionMonitor: TransactionMonitor | null = null;
+  private cacheMonitor: CacheMonitor | null = null;
+  private dnsMonitor: DnsMonitor | null = null;
+  private adaptiveSampler: AdaptiveSampler | null = null;
   private httpTracker: HttpInstrumentation | null = null;
   private fsTracker: FsInstrumentation | null = null;
   private logTracker: LoggerInstrumentation | null = null;
@@ -346,6 +358,54 @@ export class DiagnosticAgent extends EventEmitter {
   }
 
   /**
+   * Enable transaction duration monitoring. Fires 'transaction' events when a
+   * BEGIN/COMMIT/ROLLBACK pattern is detected in traced queries.
+   *
+   * ✅ Prod Safe: Yes
+   * 📊 Resource Impact: Very Low
+   */
+  public withTransactionMonitor(options: TransactionMonitorOptions = {}): this {
+    this.transactionMonitorOptions = options;
+    return this;
+  }
+
+  /**
+   * Enable cache hit-rate monitoring. Fires 'cache-degraded' when the hit rate
+   * drops below the configured threshold in the sliding window.
+   *
+   * ✅ Prod Safe: Yes
+   * 📊 Resource Impact: Very Low
+   */
+  public withCacheMonitor(options: CacheMonitorOptions = {}): this {
+    this.cacheMonitorOptions = options;
+    return this;
+  }
+
+  /**
+   * Enable DNS resolution monitoring. Fires 'dns' for every lookup and
+   * 'slow-dns' when resolution exceeds the threshold.
+   *
+   * ✅ Prod Safe: Yes
+   * 📊 Resource Impact: Low
+   */
+  public withDnsMonitor(options: DnsMonitorOptions = {}): this {
+    this.dnsMonitorOptions = options;
+    return this;
+  }
+
+  /**
+   * Enable adaptive sampling. Queries/HTTP events are sampled at the configured
+   * rate to reduce overhead under high load.
+   *
+   * ✅ Prod Safe: Yes
+   * 📊 Resource Impact: Very Low
+   */
+  public withAdaptiveSampler(options: AdaptiveSamplerOptions = {}): this {
+    this.adaptiveSamplerOptions = options;
+    return this;
+  }
+
+  /**
    * Enable a one-time static code scan (TypeScript + ESLint) on startup.
    * Results are emitted as a 'scan' event.
    */
@@ -570,7 +630,7 @@ export class DiagnosticAgent extends EventEmitter {
     this.monitor.start();
   }
 
-  /** Steps 5–5b — Instrumentation engine + query analyzer + slow query monitor. */
+  /** Steps 5–5b — Instrumentation engine + query analyzer + slow query monitor + analysis monitors. */
   private wireInstrumentationEngine(): void {
     if (this.queryAnalysisOptions !== null) {
       this.queryAnalyzer = new QueryAnalyzer(this.queryAnalysisOptions);
@@ -578,6 +638,10 @@ export class DiagnosticAgent extends EventEmitter {
 
     if (this.slowQueryOptions !== null) {
       this.slowQueryMonitor = new SlowQueryMonitor(this.slowQueryOptions);
+    }
+
+    if (this.adaptiveSamplerOptions !== null) {
+      this.adaptiveSampler = new AdaptiveSampler(this.adaptiveSamplerOptions);
     }
 
     if (!this.instrumentationOptions) return;
@@ -590,6 +654,9 @@ export class DiagnosticAgent extends EventEmitter {
     const aggregator = this.aggregator!;
 
     this.engine.on("query", (traced: TracedQuery) => {
+      // Adaptive sampling — drop event if bucket is empty
+      if (this.adaptiveSampler && !this.adaptiveSampler.shouldSample("query")) return;
+
       const enriched = this.queryAnalyzer
         ? { ...traced, suggestions: this.queryAnalyzer.analyze(traced.sanitizedQuery) }
         : traced;
@@ -615,9 +682,28 @@ export class DiagnosticAgent extends EventEmitter {
     });
 
     this.engine.enable();
+
+    // Attach analysis monitors that subscribe to the engine's query events
+    if (this.transactionMonitorOptions !== null) {
+      this.transactionMonitor = new TransactionMonitor(this.transactionMonitorOptions);
+      this.transactionMonitor.attach(this.engine);
+      this.transactionMonitor.on("transaction", (event: TransactionEvent) => {
+        aggregator.record("transaction", event.durationMs, event as unknown as Record<string, unknown>);
+        this.emit("transaction", event);
+      });
+    }
+
+    if (this.cacheMonitorOptions !== null) {
+      this.cacheMonitor = new CacheMonitor(this.cacheMonitorOptions);
+      this.cacheMonitor.attach(this.engine);
+      this.cacheMonitor.on("cache-degraded", (event) => {
+        aggregator.record("cache-degraded", event.hitRate, event as unknown as Record<string, unknown>);
+        this.emit("cache-degraded", event);
+      });
+    }
   }
 
-  /** Steps 8–10 — HTTP, FS, and log trackers. */
+  /** Steps 8–10 — HTTP, FS, log, and DNS trackers. */
   private wireTrackers(): void {
     if (this.httpTracingEnabled) {
       this.httpTracker = new HttpInstrumentation(() => this.engine?.extractSourceLine());
@@ -636,6 +722,19 @@ export class DiagnosticAgent extends EventEmitter {
         this.logTracingOptions,
       );
       this.wireTracker(this.logTracker, "log", "log");
+    }
+
+    if (this.dnsMonitorOptions !== null) {
+      this.dnsMonitor = new DnsMonitor(this.dnsMonitorOptions);
+      this.dnsMonitor.on("dns", (event) => {
+        this.aggregator!.record("dns", event.durationMs, event as unknown as Record<string, unknown>);
+        this.emit("dns", event);
+      });
+      this.dnsMonitor.on("slow-dns", (event) => {
+        this.aggregator!.record("slow-dns", event.durationMs, event as unknown as Record<string, unknown>);
+        this.emit("slow-dns", event);
+      });
+      this.dnsMonitor.enable();
     }
   }
 
@@ -741,6 +840,10 @@ export class DiagnosticAgent extends EventEmitter {
     this.slowQueryMonitor = null;
     if (this.gcMonitor) { this.gcMonitor.stop(); this.gcMonitor = null; }
     if (this.poolMonitor) { this.poolMonitor.stop(); this.poolMonitor = null; }
+    if (this.transactionMonitor) { this.transactionMonitor.stop(); this.transactionMonitor = null; }
+    if (this.cacheMonitor) { this.cacheMonitor.stop(); this.cacheMonitor = null; }
+    if (this.dnsMonitor) { this.dnsMonitor.disable(); this.dnsMonitor = null; }
+    this.adaptiveSampler = null;
 
     // Remove debug console listeners added by useConsoleLogger (if any).
     for (const [event, fn] of this.debugListeners) {
