@@ -23,7 +23,9 @@ describe("RuntimeMonitor — heap-oom-risk", () => {
     const monitor = new RuntimeMonitor({ heapUsagePctThreshold: 90 });
     const events: ProfilerEvent[] = [];
     monitor.on("anomaly", (e) => events.push(e));
-    monitor.on("error", () => { /* ignore snapshot errors */ });
+    monitor.on("error", () => {
+      /* ignore snapshot errors */
+    });
 
     await monitor._injectHighHeap(92);
 
@@ -36,7 +38,9 @@ describe("RuntimeMonitor — heap-oom-risk", () => {
     const monitor = new RuntimeMonitor();
     const events: ProfilerEvent[] = [];
     monitor.on("anomaly", (e) => events.push(e));
-    monitor.on("error", () => { /* ignore */ });
+    monitor.on("error", () => {
+      /* ignore */
+    });
 
     await monitor._injectHighHeap(91);
     monitor.stop();
@@ -69,7 +73,9 @@ describe("RuntimeMonitor — heap-oom-risk", () => {
     const monitor = new RuntimeMonitor({ heapUsagePctThreshold: 90 });
     const events: ProfilerEvent[] = [];
     monitor.on("anomaly", (e) => events.push(e));
-    monitor.on("error", () => { /* ignore snapshot errors */ });
+    monitor.on("error", () => {
+      /* ignore snapshot errors */
+    });
 
     await monitor._injectHighHeap(95.5);
     await monitor._injectHighHeap(98.1);

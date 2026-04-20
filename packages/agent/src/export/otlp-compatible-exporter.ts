@@ -26,9 +26,7 @@ export class OTLPCompatibleExporter {
     try {
       parsed = new URL(config.endpointUrl);
     } catch {
-      throw new TypeError(
-        `OTLPCompatibleExporter: invalid endpointUrl "${config.endpointUrl}"`,
-      );
+      throw new TypeError(`OTLPCompatibleExporter: invalid endpointUrl "${config.endpointUrl}"`);
     }
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
       throw new TypeError(
@@ -63,9 +61,7 @@ export class OTLPCompatibleExporter {
       resourceMetrics: [
         {
           resource: {
-            attributes: [
-              { key: "service.name", value: { stringValue: serviceName } },
-            ],
+            attributes: [{ key: "service.name", value: { stringValue: serviceName } }],
           },
           scopeMetrics: [
             {
@@ -109,9 +105,7 @@ export class OTLPCompatibleExporter {
           res.resume(); // drain response
           if (res.statusCode && res.statusCode >= 400) {
             reject(
-              new Error(
-                `OTLPCompatibleExporter: export failed with status ${res.statusCode}`,
-              ),
+              new Error(`OTLPCompatibleExporter: export failed with status ${res.statusCode}`),
             );
           } else {
             resolve();
@@ -120,9 +114,7 @@ export class OTLPCompatibleExporter {
       );
 
       req.on("timeout", () => {
-        req.destroy(
-          new Error(`OTLPCompatibleExporter: request timed out after ${timeoutMs}ms`),
-        );
+        req.destroy(new Error(`OTLPCompatibleExporter: request timed out after ${timeoutMs}ms`));
       });
       req.on("error", reject);
       req.write(body);

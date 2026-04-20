@@ -50,7 +50,9 @@ export class ExplainAnalyzer extends EventEmitter {
   /** Attach to an EventEmitter that emits TracedQuery events on the 'query' channel. */
   attach(source: EventEmitter): this {
     if (this.sources.has(source)) return this;
-    const listener = (q: TracedQuery) => { void this._onQuery(q); };
+    const listener = (q: TracedQuery) => {
+      void this._onQuery(q);
+    };
     source.on("query", listener);
     this.sources.set(source, listener);
     return this;

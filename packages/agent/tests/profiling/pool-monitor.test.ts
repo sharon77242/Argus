@@ -120,8 +120,9 @@ describe("PoolMonitor", () => {
     await new Promise((r) => setTimeout(r, 60)); // allow one poll to detect waitingCount=1
 
     // Simulate a slow acquire: backdate the waitStartAt by overriding it
-    const reg = (monitor as unknown as { registrations: Map<PoolLike, { waitStartAt: number | null }> })
-      .registrations.get(pool);
+    const reg = (
+      monitor as unknown as { registrations: Map<PoolLike, { waitStartAt: number | null }> }
+    ).registrations.get(pool);
     if (reg) reg.waitStartAt = Date.now() - 800; // 800ms > 500ms threshold
 
     pool.emit("acquire"); // trigger the acquire listener
@@ -139,8 +140,9 @@ describe("PoolMonitor", () => {
     monitor.watch(pool, "pg");
     await new Promise((r) => setTimeout(r, 60));
 
-    const reg = (monitor as unknown as { registrations: Map<PoolLike, { waitStartAt: number | null }> })
-      .registrations.get(pool);
+    const reg = (
+      monitor as unknown as { registrations: Map<PoolLike, { waitStartAt: number | null }> }
+    ).registrations.get(pool);
     if (reg) reg.waitStartAt = Date.now() - 10; // 10ms < 500ms threshold
 
     pool.emit("acquire");

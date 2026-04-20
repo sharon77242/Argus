@@ -26,33 +26,33 @@ export interface SlowQueryRecord {
  */
 export const DRIVER_DEFAULTS: Readonly<Record<string, number>> = {
   // ── relational ───────────────────────────────────────────
-  pg:                         500,
-  mysql2:                     500,
-  mssql:                      500,
-  tedious:                    500,   // underlying MS SQL driver
-  "better-sqlite3":           100,   // local disk — fast
+  pg: 500,
+  mysql2: 500,
+  mssql: 500,
+  tedious: 500, // underlying MS SQL driver
+  "better-sqlite3": 100, // local disk — fast
 
   // ── in-memory / cache ────────────────────────────────────
-  redis:                       50,
-  ioredis:                     50,
+  redis: 50,
+  ioredis: 50,
 
   // ── document / NoSQL ─────────────────────────────────────
-  mongodb:                    500,
-  "@google-cloud/firestore":  1000,
+  mongodb: 500,
+  "@google-cloud/firestore": 1000,
   "@aws-sdk/client-dynamodb": 200,
-  "@aws-sdk/lib-dynamodb":    200,
+  "@aws-sdk/lib-dynamodb": 200,
 
   // ── graph / search ───────────────────────────────────────
-  "neo4j-driver":             1000,
-  "@elastic/elasticsearch":   2000,
+  "neo4j-driver": 1000,
+  "@elastic/elasticsearch": 2000,
 
   // ── analytics (large scans are normal) ───────────────────
-  "@clickhouse/client":       5000,
-  "@google-cloud/bigquery":  10000,
-  "cassandra-driver":          500,
+  "@clickhouse/client": 5000,
+  "@google-cloud/bigquery": 10000,
+  "cassandra-driver": 500,
 
   // ── ORM (overhead from the underlying driver) ────────────
-  "@prisma/client":           1000,
+  "@prisma/client": 1000,
 };
 
 export interface SlowQueryOptions {
@@ -99,7 +99,7 @@ export class SlowQueryMonitor {
   private readonly warnedDrivers = new Set<string>();
 
   constructor(options: SlowQueryOptions = {}) {
-    const envDefault = parseInt(process.env.ARGUS_SLOW_QUERY_THRESHOLD_MS ?? '', 10);
+    const envDefault = parseInt(process.env.ARGUS_SLOW_QUERY_THRESHOLD_MS ?? "", 10);
     this.defaultThreshold = !isNaN(envDefault) ? envDefault : (options.defaultThresholdMs ?? 1000);
     this.topN = options.topN ?? 5;
     this.thresholds = new Map(Object.entries(options.thresholds ?? {}));
@@ -112,19 +112,20 @@ export class SlowQueryMonitor {
   public getThreshold(driver: string): number {
     // 1. Per-driver env var (highest priority)
     const envKey = `ARGUS_SLOW_QUERY_THRESHOLD_${this.driverToEnvKey(driver)}`;
-    const envVal = parseInt(process.env[envKey] ?? '', 10);
+    const envVal = parseInt(process.env[envKey] ?? "", 10);
     if (!isNaN(envVal)) return envVal;
     // 2. Per-driver options value
     if (this.thresholds.has(driver)) return this.thresholds.get(driver)!;
     // 3. Built-in per-driver default
-    if (Object.prototype.hasOwnProperty.call(DRIVER_DEFAULTS, driver)) return DRIVER_DEFAULTS[driver];
+    if (Object.prototype.hasOwnProperty.call(DRIVER_DEFAULTS, driver))
+      return DRIVER_DEFAULTS[driver];
     // 4. Global fallback — warn once in non-production so new drivers don't silently inherit 1000 ms
-    if (process.env.NODE_ENV !== 'production' && !this.warnedDrivers.has(driver)) {
+    if (process.env.NODE_ENV !== "production" && !this.warnedDrivers.has(driver)) {
       this.warnedDrivers.add(driver);
       process.emitWarning(
         `[SlowQueryMonitor] No threshold registered for driver "${driver}" — falling back to ${this.defaultThreshold} ms. ` +
-        `Add an entry to DRIVER_DEFAULTS in slow-query-monitor.ts or set ARGUS_SLOW_QUERY_THRESHOLD_${this.driverToEnvKey(driver)}.`,
-        { code: 'ARGUS_MISSING_DRIVER_THRESHOLD' },
+          `Add an entry to DRIVER_DEFAULTS in slow-query-monitor.ts or set ARGUS_SLOW_QUERY_THRESHOLD_${this.driverToEnvKey(driver)}.`,
+        { code: "ARGUS_MISSING_DRIVER_THRESHOLD" },
       );
     }
     return this.defaultThreshold;
@@ -185,6 +186,9 @@ export class SlowQueryMonitor {
 
   /** Convert a driver name to the uppercase env-var suffix form. */
   private driverToEnvKey(driver: string): string {
-    return driver.replace(/[^a-zA-Z0-9]+/g, '_').toUpperCase().replace(/^_+|_+$/g, '');
+    return driver
+      .replace(/[^a-zA-Z0-9]+/g, "_")
+      .toUpperCase()
+      .replace(/^_+|_+$/g, "");
   }
 }

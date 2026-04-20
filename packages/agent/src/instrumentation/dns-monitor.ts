@@ -66,10 +66,7 @@ export class DnsMonitor extends EventEmitter {
     this._origLookup = origLookup;
 
     // dns.lookup has several overloads; we intercept the callback variant only.
-    (dns as Record<string, unknown>).lookup = (
-      hostname: string,
-      ...rest: unknown[]
-    ): void => {
+    (dns as Record<string, unknown>).lookup = (hostname: string, ...rest: unknown[]): void => {
       const lastArg = rest[rest.length - 1];
       if (typeof lastArg !== "function") {
         // Non-callback form (options without callback) — pass through unmodified

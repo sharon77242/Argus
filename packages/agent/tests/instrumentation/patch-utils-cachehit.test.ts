@@ -77,10 +77,7 @@ describe("wrapMethod — captureHit", () => {
     safeChannel("db.query.execution").subscribe(listener);
 
     await new Promise<void>((resolve) => {
-      (target.get as (k: string, cb: (e: null, r: string) => void) => void)(
-        "key",
-        () => resolve(),
-      );
+      (target.get as (k: string, cb: (e: null, r: string) => void) => void)("key", () => resolve());
     });
     safeChannel("db.query.execution").unsubscribe(listener);
 
@@ -111,9 +108,6 @@ describe("wrapMethod — captureHit", () => {
   it("PATCHED_SYMBOL is set on wrapped functions", () => {
     const target = { fn: () => null };
     wrapMethod(target, "fn", "sym-test");
-    assert.strictEqual(
-      (target.fn as unknown as Record<symbol, unknown>)[PATCHED_SYMBOL],
-      true,
-    );
+    assert.strictEqual((target.fn as unknown as Record<symbol, unknown>)[PATCHED_SYMBOL], true);
   });
 });

@@ -89,7 +89,7 @@ describe("GcMonitor", () => {
 
     monitor._injectGcPause(100); // fires → samples cleared
     // Re-inject a small pause that alone is below threshold
-    monitor._injectGcPause(1);   // 1ms / 1000ms = 0.1% < 5% → no second event
+    monitor._injectGcPause(1); // 1ms / 1000ms = 0.1% < 5% → no second event
 
     assert.strictEqual(events.length, 1);
   });

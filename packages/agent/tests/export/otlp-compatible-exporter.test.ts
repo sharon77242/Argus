@@ -62,8 +62,13 @@ describe("OTLPCompatibleExporter", () => {
       receivedMethod = req.method ?? "";
       receivedPath = req.url ?? "";
       let data = "";
-      req.on("data", (chunk) => { data += String(chunk); });
-      req.on("end", () => { receivedBody = data; res.writeHead(200).end(); });
+      req.on("data", (chunk) => {
+        data += String(chunk);
+      });
+      req.on("end", () => {
+        receivedBody = data;
+        res.writeHead(200).end();
+      });
     });
 
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -114,7 +119,9 @@ describe("OTLPCompatibleExporter", () => {
   });
 
   it("rejects on HTTP 4xx response", async () => {
-    const server = http.createServer((_req, res) => { res.writeHead(401).end(); });
+    const server = http.createServer((_req, res) => {
+      res.writeHead(401).end();
+    });
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     const { port } = server.address() as { port: number };
 
@@ -129,7 +136,9 @@ describe("OTLPCompatibleExporter", () => {
   });
 
   it("rejects on HTTP 5xx response", async () => {
-    const server = http.createServer((_req, res) => { res.writeHead(500).end(); });
+    const server = http.createServer((_req, res) => {
+      res.writeHead(500).end();
+    });
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     const { port } = server.address() as { port: number };
 
@@ -147,8 +156,13 @@ describe("OTLPCompatibleExporter", () => {
     let receivedBody = "";
     const server = http.createServer((req, res) => {
       let d = "";
-      req.on("data", (c) => { d += String(c); });
-      req.on("end", () => { receivedBody = d; res.writeHead(200).end(); });
+      req.on("data", (c) => {
+        d += String(c);
+      });
+      req.on("end", () => {
+        receivedBody = d;
+        res.writeHead(200).end();
+      });
     });
 
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -162,7 +176,9 @@ describe("OTLPCompatibleExporter", () => {
       await exporter.export([makeEvent()]);
 
       const parsed = JSON.parse(receivedBody) as {
-        resourceMetrics: [{ resource: { attributes: { key: string; value: { stringValue: string } }[] } }]
+        resourceMetrics: [
+          { resource: { attributes: { key: string; value: { stringValue: string } }[] } },
+        ];
       };
       const attrs = parsed.resourceMetrics[0].resource.attributes;
       const svcAttr = attrs.find((a) => a.key === "service.name");

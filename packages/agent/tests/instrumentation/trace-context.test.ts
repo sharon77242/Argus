@@ -36,10 +36,7 @@ describe("parseTraceparent", () => {
   });
 
   it("returns null when spanId is wrong length", () => {
-    assert.strictEqual(
-      parseTraceparent("00-4bf92f3577b34da6a3ce929d0e0e4736-tooshort-01"),
-      null,
-    );
+    assert.strictEqual(parseTraceparent("00-4bf92f3577b34da6a3ce929d0e0e4736-tooshort-01"), null);
   });
 
   it("returns null for non-hex characters", () => {

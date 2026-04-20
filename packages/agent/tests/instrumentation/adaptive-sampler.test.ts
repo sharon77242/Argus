@@ -19,9 +19,9 @@ describe("AdaptiveSampler", () => {
 
   it("consumes one token per shouldSample(true) call", () => {
     const sampler = new AdaptiveSampler({ burst: 3, ratePerMs: 0 }); // no refill
-    assert.strictEqual(sampler.shouldSample("q"), true);  // 3→2
-    assert.strictEqual(sampler.shouldSample("q"), true);  // 2→1
-    assert.strictEqual(sampler.shouldSample("q"), true);  // 1→0
+    assert.strictEqual(sampler.shouldSample("q"), true); // 3→2
+    assert.strictEqual(sampler.shouldSample("q"), true); // 2→1
+    assert.strictEqual(sampler.shouldSample("q"), true); // 1→0
     assert.strictEqual(sampler.shouldSample("q"), false); // 0 → drop
   });
 
@@ -79,7 +79,7 @@ describe("AdaptiveSampler", () => {
     sampler.shouldSample("a"); // drain a
     sampler.shouldSample("b"); // drain b
     sampler.reset("a");
-    assert.strictEqual(sampler.shouldSample("a"), true);  // refilled
+    assert.strictEqual(sampler.shouldSample("a"), true); // refilled
     assert.strictEqual(sampler.shouldSample("b"), false); // still drained
   });
 });

@@ -1,10 +1,7 @@
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import {
-  CacheMonitor,
-  type CacheDegradedEvent,
-} from "../../src/analysis/cache-monitor.ts";
+import { CacheMonitor, type CacheDegradedEvent } from "../../src/analysis/cache-monitor.ts";
 import type { TracedQuery } from "../../src/instrumentation/engine.ts";
 
 function makeQuery(overrides: Partial<TracedQuery> = {}): TracedQuery {

@@ -15,14 +15,35 @@ import { OTLPExporter, type ExporterConfig } from "./export/exporter.ts";
 import { EntropyChecker } from "./sanitization/entropy-checker.ts";
 import { applyDriverPatches, removeDriverPatches } from "./instrumentation/drivers/index.ts";
 import { QueryAnalyzer, type QueryAnalyzerOptions } from "./analysis/query-analyzer.ts";
-import { SlowQueryMonitor, type SlowQueryOptions, type SlowQueryRecord } from "./analysis/slow-query-monitor.ts";
+import {
+  SlowQueryMonitor,
+  type SlowQueryOptions,
+  type SlowQueryRecord,
+} from "./analysis/slow-query-monitor.ts";
 import { GcMonitor, type GcMonitorOptions, type GcPressureEvent } from "./profiling/gc-monitor.ts";
-import { PoolMonitor, type PoolMonitorOptions, type PoolLike, type PoolExhaustionEvent, type SlowAcquireEvent } from "./profiling/pool-monitor.ts";
-import { createRequestContext, runWithContext, type RequestContext } from "./instrumentation/correlation.ts";
-import { TransactionMonitor, type TransactionMonitorOptions, type TransactionEvent } from "./analysis/transaction-monitor.ts";
+import {
+  PoolMonitor,
+  type PoolMonitorOptions,
+  type PoolLike,
+  type PoolExhaustionEvent,
+  type SlowAcquireEvent,
+} from "./profiling/pool-monitor.ts";
+import {
+  createRequestContext,
+  runWithContext,
+  type RequestContext,
+} from "./instrumentation/correlation.ts";
+import {
+  TransactionMonitor,
+  type TransactionMonitorOptions,
+  type TransactionEvent,
+} from "./analysis/transaction-monitor.ts";
 import { CacheMonitor, type CacheMonitorOptions } from "./analysis/cache-monitor.ts";
 import { DnsMonitor, type DnsMonitorOptions } from "./instrumentation/dns-monitor.ts";
-import { AdaptiveSampler, type AdaptiveSamplerOptions } from "./instrumentation/adaptive-sampler.ts";
+import {
+  AdaptiveSampler,
+  type AdaptiveSamplerOptions,
+} from "./instrumentation/adaptive-sampler.ts";
 import { StaticScanner } from "./analysis/static-scanner.ts";
 import { HttpInstrumentation } from "./instrumentation/http.ts";
 import { FsInstrumentation } from "./instrumentation/fs.ts";
@@ -672,7 +693,11 @@ export class DiagnosticAgent extends EventEmitter {
           traced.traceId,
         );
         if (slow) {
-          aggregator.record("slow-query", slow.durationMs, slow as unknown as Record<string, unknown>);
+          aggregator.record(
+            "slow-query",
+            slow.durationMs,
+            slow as unknown as Record<string, unknown>,
+          );
           this.emit("slow-query", slow);
         }
       }
@@ -688,7 +713,11 @@ export class DiagnosticAgent extends EventEmitter {
       this.transactionMonitor = new TransactionMonitor(this.transactionMonitorOptions);
       this.transactionMonitor.attach(this.engine);
       this.transactionMonitor.on("transaction", (event: TransactionEvent) => {
-        aggregator.record("transaction", event.durationMs, event as unknown as Record<string, unknown>);
+        aggregator.record(
+          "transaction",
+          event.durationMs,
+          event as unknown as Record<string, unknown>,
+        );
         this.emit("transaction", event);
       });
     }
@@ -697,7 +726,11 @@ export class DiagnosticAgent extends EventEmitter {
       this.cacheMonitor = new CacheMonitor(this.cacheMonitorOptions);
       this.cacheMonitor.attach(this.engine);
       this.cacheMonitor.on("cache-degraded", (event) => {
-        aggregator.record("cache-degraded", event.hitRate, event as unknown as Record<string, unknown>);
+        aggregator.record(
+          "cache-degraded",
+          event.hitRate,
+          event as unknown as Record<string, unknown>,
+        );
         this.emit("cache-degraded", event);
       });
     }
@@ -727,11 +760,19 @@ export class DiagnosticAgent extends EventEmitter {
     if (this.dnsMonitorOptions !== null) {
       this.dnsMonitor = new DnsMonitor(this.dnsMonitorOptions);
       this.dnsMonitor.on("dns", (event) => {
-        this.aggregator!.record("dns", event.durationMs, event as unknown as Record<string, unknown>);
+        this.aggregator!.record(
+          "dns",
+          event.durationMs,
+          event as unknown as Record<string, unknown>,
+        );
         this.emit("dns", event);
       });
       this.dnsMonitor.on("slow-dns", (event) => {
-        this.aggregator!.record("slow-dns", event.durationMs, event as unknown as Record<string, unknown>);
+        this.aggregator!.record(
+          "slow-dns",
+          event.durationMs,
+          event as unknown as Record<string, unknown>,
+        );
         this.emit("slow-dns", event);
       });
       this.dnsMonitor.enable();
@@ -758,7 +799,11 @@ export class DiagnosticAgent extends EventEmitter {
     if (this.gcMonitorOptions !== null) {
       this.gcMonitor = new GcMonitor(this.gcMonitorOptions);
       this.gcMonitor.on("gc-pressure", (event: GcPressureEvent) => {
-        this.aggregator!.record("gc-pressure", event.totalPauseMs, event as unknown as Record<string, unknown>);
+        this.aggregator!.record(
+          "gc-pressure",
+          event.totalPauseMs,
+          event as unknown as Record<string, unknown>,
+        );
         this.emit("gc-pressure", event);
       });
       this.gcMonitor.start();
@@ -767,11 +812,19 @@ export class DiagnosticAgent extends EventEmitter {
     if (this.poolMonitorOptions !== null) {
       this.poolMonitor = new PoolMonitor(this.poolMonitorOptions);
       this.poolMonitor.on("pool-exhaustion", (event: PoolExhaustionEvent) => {
-        this.aggregator!.record("pool-exhaustion", event.waitingCount, event as unknown as Record<string, unknown>);
+        this.aggregator!.record(
+          "pool-exhaustion",
+          event.waitingCount,
+          event as unknown as Record<string, unknown>,
+        );
         this.emit("pool-exhaustion", event);
       });
       this.poolMonitor.on("slow-acquire", (event: SlowAcquireEvent) => {
-        this.aggregator!.record("slow-acquire", event.waitMs, event as unknown as Record<string, unknown>);
+        this.aggregator!.record(
+          "slow-acquire",
+          event.waitMs,
+          event as unknown as Record<string, unknown>,
+        );
         this.emit("slow-acquire", event);
       });
     }
@@ -838,11 +891,26 @@ export class DiagnosticAgent extends EventEmitter {
     this.leakMonitor = null;
     this.queryAnalyzer = null;
     this.slowQueryMonitor = null;
-    if (this.gcMonitor) { this.gcMonitor.stop(); this.gcMonitor = null; }
-    if (this.poolMonitor) { this.poolMonitor.stop(); this.poolMonitor = null; }
-    if (this.transactionMonitor) { this.transactionMonitor.stop(); this.transactionMonitor = null; }
-    if (this.cacheMonitor) { this.cacheMonitor.stop(); this.cacheMonitor = null; }
-    if (this.dnsMonitor) { this.dnsMonitor.disable(); this.dnsMonitor = null; }
+    if (this.gcMonitor) {
+      this.gcMonitor.stop();
+      this.gcMonitor = null;
+    }
+    if (this.poolMonitor) {
+      this.poolMonitor.stop();
+      this.poolMonitor = null;
+    }
+    if (this.transactionMonitor) {
+      this.transactionMonitor.stop();
+      this.transactionMonitor = null;
+    }
+    if (this.cacheMonitor) {
+      this.cacheMonitor.stop();
+      this.cacheMonitor = null;
+    }
+    if (this.dnsMonitor) {
+      this.dnsMonitor.disable();
+      this.dnsMonitor = null;
+    }
     this.adaptiveSampler = null;
 
     // Remove debug console listeners added by useConsoleLogger (if any).
@@ -895,15 +963,21 @@ export class DiagnosticAgent extends EventEmitter {
     });
     add("slow-query", (s) => {
       const ev = s as SlowQueryRecord;
-      console.warn(`${prefix} SLOW    [${ev.durationMs.toFixed(1)}ms > ${ev.thresholdMs}ms] driver=${ev.driver} — ${ev.sanitizedQuery}`);
+      console.warn(
+        `${prefix} SLOW    [${ev.durationMs.toFixed(1)}ms > ${ev.thresholdMs}ms] driver=${ev.driver} — ${ev.sanitizedQuery}`,
+      );
     });
     add("gc-pressure", (g) => {
       const ev = g as GcPressureEvent;
-      console.warn(`${prefix} GC      [${ev.totalPauseMs.toFixed(1)}ms | ${ev.pausePct.toFixed(1)}% of ${ev.windowMs}ms window] ${ev.gcCount} cycles`);
+      console.warn(
+        `${prefix} GC      [${ev.totalPauseMs.toFixed(1)}ms | ${ev.pausePct.toFixed(1)}% of ${ev.windowMs}ms window] ${ev.gcCount} cycles`,
+      );
     });
     add("pool-exhaustion", (p) => {
       const ev = p as PoolExhaustionEvent;
-      console.warn(`${prefix} POOL    [${ev.driver}] waiting=${ev.waitingCount} idle=${ev.idleCount} total=${ev.totalCount}`);
+      console.warn(
+        `${prefix} POOL    [${ev.driver}] waiting=${ev.waitingCount} idle=${ev.idleCount} total=${ev.totalCount}`,
+      );
     });
     add("slow-acquire", (s) => {
       const ev = s as SlowAcquireEvent;
@@ -1004,11 +1078,7 @@ export class DiagnosticAgent extends EventEmitter {
    * Creates and returns a `RequestContext` for manual use (e.g. background jobs, queue workers).
    * Pass the returned context to `runWithContext(ctx, fn)` to propagate tracing.
    */
-  public createContext(
-    method?: string,
-    url?: string,
-    traceparent?: string,
-  ): RequestContext {
+  public createContext(method?: string, url?: string, traceparent?: string): RequestContext {
     return createRequestContext(method, url, traceparent);
   }
 

@@ -1,10 +1,7 @@
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import {
-  ExplainAnalyzer,
-  type ExplainResult,
-} from "../../src/analysis/explain-analyzer.ts";
+import { ExplainAnalyzer, type ExplainResult } from "../../src/analysis/explain-analyzer.ts";
 import type { TracedQuery } from "../../src/instrumentation/engine.ts";
 
 function makeQuery(overrides: Partial<TracedQuery> = {}): TracedQuery {
@@ -29,7 +26,10 @@ describe("ExplainAnalyzer", () => {
   it("analyze() calls executor with normalized query", async () => {
     const calls: string[] = [];
     analyzer = new ExplainAnalyzer({
-      executor: async (q) => { calls.push(q); return [{ type: "Seq Scan" }]; },
+      executor: async (q) => {
+        calls.push(q);
+        return [{ type: "Seq Scan" }];
+      },
     });
 
     const result = await analyzer.analyze("SELECT * FROM users WHERE id = ?");
@@ -56,7 +56,9 @@ describe("ExplainAnalyzer", () => {
 
   it("analyze() returns null when executor throws", async () => {
     analyzer = new ExplainAnalyzer({
-      executor: async () => { throw new Error("db error"); },
+      executor: async () => {
+        throw new Error("db error");
+      },
     });
 
     const result = await analyzer.analyze("SELECT 1");
@@ -107,7 +109,10 @@ describe("ExplainAnalyzer", () => {
   it("respects cooldownMs — same query pattern is not EXPLAINed twice quickly", async () => {
     let callCount = 0;
     analyzer = new ExplainAnalyzer({
-      executor: async () => { callCount++; return []; },
+      executor: async () => {
+        callCount++;
+        return [];
+      },
       slowThresholdMs: 0,
       cooldownMs: 60_000, // 1 minute cooldown
     });
@@ -124,7 +129,9 @@ describe("ExplainAnalyzer", () => {
 
   it("emits 'error' event when executor throws in attach path", async () => {
     analyzer = new ExplainAnalyzer({
-      executor: async () => { throw new Error("explain failed"); },
+      executor: async () => {
+        throw new Error("explain failed");
+      },
       slowThresholdMs: 0,
       cooldownMs: 0,
     });
@@ -176,7 +183,10 @@ describe("ExplainAnalyzer", () => {
   it("attach() is idempotent", async () => {
     let callCount = 0;
     analyzer = new ExplainAnalyzer({
-      executor: async () => { callCount++; return []; },
+      executor: async () => {
+        callCount++;
+        return [];
+      },
       slowThresholdMs: 0,
       cooldownMs: 0,
     });
