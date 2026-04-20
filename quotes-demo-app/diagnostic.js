@@ -22,6 +22,11 @@ const agent = DiagnosticAgent.createProfile({
 // (Normally reserved for the 'worker' profile — included here to showcase all free-mode features.)
 agent.withRuntimeMonitor();
 
+// Additional monitors not included in the web/db profile — enabled here for the demo.
+agent.withTransactionMonitor();
+agent.withDnsMonitor();
+agent.withGcMonitor();
+
 // ── live event listeners ──────────────────────────────────────────────────────
 
 agent.on('query', (q) => {
@@ -103,6 +108,46 @@ agent.on('crash', (crash) => {
   console.error(
     `${c.dim}${stamp()}${c.reset} ${tag(c.red,'CRASH')} ` +
     `${crash.error?.message ?? String(crash)}`
+  );
+});
+
+agent.on('slow-query', (q) => {
+  console.warn(
+    `${c.dim}${stamp()}${c.reset} ${tag(c.yellow,'SLOW ')} ` +
+    `[${q.driver}] ${c.bold}${q.sanitizedQuery?.slice(0, 80)}${c.reset} ` +
+    `${c.red}${q.durationMs.toFixed(1)}ms > ${q.thresholdMs}ms threshold${c.reset}`
+  );
+});
+
+agent.on('transaction', (t) => {
+  const outcome = t.aborted ? `${c.red}ROLLBACK${c.reset}` : `${c.green}COMMIT${c.reset}`;
+  console.log(
+    `${c.dim}${stamp()}${c.reset} ${tag(c.cyan,'TXN  ')} ` +
+    `[${t.driver}] ${outcome} — ${t.queryCount} quer${t.queryCount !== 1 ? 'ies' : 'y'} ` +
+    `${c.dim}(${t.durationMs.toFixed(1)}ms)${c.reset}`
+  );
+});
+
+agent.on('dns', (d) => {
+  console.log(
+    `${c.dim}${stamp()}${c.reset} ${tag(c.cyan,'DNS  ')} ` +
+    `${d.hostname} → ${(d.addresses || []).join(', ') || '(error)'} ` +
+    `${c.dim}(${d.durationMs.toFixed(1)}ms)${c.reset}`
+  );
+});
+
+agent.on('slow-dns', (d) => {
+  console.warn(
+    `${c.dim}${stamp()}${c.reset} ${tag(c.yellow,'SDNS ')} ` +
+    `${d.hostname} resolved in ${c.yellow}${d.durationMs.toFixed(1)}ms${c.reset} (slow-dns threshold exceeded)`
+  );
+});
+
+agent.on('gc-pressure', (g) => {
+  console.warn(
+    `${c.dim}${stamp()}${c.reset} ${tag(c.yellow,'GC   ')} ` +
+    `${g.gcCount} GC cycle(s), ${g.totalPauseMs.toFixed(1)}ms total ` +
+    `${c.yellow}(${g.pausePct.toFixed(1)}% of ${g.windowMs}ms window)${c.reset}`
   );
 });
 

@@ -8,6 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/db');
+const dns = require('dns');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
@@ -115,6 +116,119 @@ router.get('/outbound', (_req, res) => {
     remote.resume();
     remote.on('end', () => res.json({ ok: true }));
   }).on('error', () => res.json({ ok: true, note: 'httpbin unreachable' }));
+});
+
+// ── Query hints: missing-where-delete ─────────────────────────────────────────
+
+// Triggers: missing-where-delete (critical — deletes every row without WHERE)
+router.post('/delete-all', async (_req, res) => {
+  try {
+    await db.query('DELETE FROM quote');
+    res.json({ deleted: 'all rows' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Slow query ────────────────────────────────────────────────────────────────
+
+// Triggers: slow-query event (pg_sleep(0.6) exceeds the 500ms pg default threshold)
+router.get('/slow-query', async (_req, res) => {
+  try {
+    await db.query('SELECT pg_sleep(0.6)');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Transaction monitoring ────────────────────────────────────────────────────
+
+// Triggers: transaction event with aborted=false (COMMIT)
+// Note: pool.query() may use different connections per call; the DB-level transaction
+// may be a no-op, but TransactionMonitor correlates by SQL pattern, not connection.
+router.get('/transaction', async (_req, res) => {
+  try {
+    await db.query('BEGIN');
+    await db.query('SELECT id FROM quote LIMIT 1');
+    await db.query('COMMIT');
+    res.json({ ok: true, outcome: 'committed' });
+  } catch (err) {
+    await db.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Triggers: transaction event with aborted=true (ROLLBACK)
+router.get('/rollback', async (_req, res) => {
+  try {
+    await db.query('BEGIN');
+    await db.query('SELECT id FROM quote LIMIT 1');
+    await db.query('ROLLBACK');
+    res.json({ ok: true, outcome: 'rolled back' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Crash detection ───────────────────────────────────────────────────────────
+
+// Triggers: crash event via unhandledRejection.
+// CrashGuard intercepts the rejection and emits 'crash' without exiting the process
+// (unhandledRejection is recoverable since Node 15+ when a listener is registered).
+router.get('/crash', (_req, res) => {
+  Promise.reject(new Error('[demo] Simulated unhandled rejection — .catch() was intentionally omitted'));
+  res.json({ ok: true, note: 'unhandledRejection fired — watch for CRASH event' });
+});
+
+// ── DNS monitoring ────────────────────────────────────────────────────────────
+
+// Triggers: dns event (+ slow-dns if resolution exceeds the 100ms threshold)
+router.get('/dns-lookup', (_req, res) => {
+  dns.lookup('example.com', (err, address) => {
+    if (err) return res.json({ ok: false, error: err.message });
+    res.json({ ok: true, address });
+  });
+});
+
+// ── HTTP hint sinks ────────────────────────────────────────────────────────────
+// These are internal targets used by the outbound routes below.
+// They are NOT meant to be called directly from traffic.js.
+
+router.get('/sink-500', (_req, res) => res.status(500).json({ error: 'demo server error' }));
+router.get('/sink-429', (_req, res) => res.status(429).json({ error: 'demo rate limit' }));
+router.get('/sink-slow', (_req, res) => { setTimeout(() => res.json({ ok: true }), 2500); });
+
+// ── HTTP hints via outbound calls ─────────────────────────────────────────────
+
+function selfGet(urlPath) {
+  const port = parseInt(process.env.TARGET_PORT || '3000', 10);
+  return new Promise((resolve) => {
+    const req = http.request({ host: 'localhost', port, path: urlPath, method: 'GET' }, (r) => {
+      r.resume();
+      r.on('end', resolve);
+    });
+    req.on('error', resolve);
+    req.end();
+  });
+}
+
+// Triggers: http-server-error hint (outbound call receives 500)
+router.get('/error-500', async (_req, res) => {
+  await selfGet('/debug/sink-500');
+  res.json({ ok: true });
+});
+
+// Triggers: http-rate-limited hint (outbound call receives 429)
+router.get('/rate-limited', async (_req, res) => {
+  await selfGet('/debug/sink-429');
+  res.json({ ok: true });
+});
+
+// Triggers: slow-http-request hint (outbound call takes > 2000ms)
+router.get('/slow-outbound', async (_req, res) => {
+  await selfGet('/debug/sink-slow');
+  res.json({ ok: true });
 });
 
 module.exports = router;

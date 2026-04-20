@@ -121,6 +121,42 @@ async function run() {
   await get('/debug/outbound');
   await wait(200);
 
+  console.log('\n[TRAFFIC] ── POST /debug/delete-all (missing-where-delete: critical) ────');
+  await post('/debug/delete-all', {});
+  await wait(100);
+
+  console.log('\n[TRAFFIC] ── GET /debug/slow-query (slow-query: 600ms > 500ms threshold) ─');
+  await get('/debug/slow-query');
+  await wait(200);
+
+  console.log('\n[TRAFFIC] ── GET /debug/transaction (transaction: COMMIT) ─────────────────');
+  await get('/debug/transaction');
+  await wait(100);
+
+  console.log('\n[TRAFFIC] ── GET /debug/rollback (transaction: ROLLBACK / aborted) ────────');
+  await get('/debug/rollback');
+  await wait(100);
+
+  console.log('\n[TRAFFIC] ── GET /debug/crash (crash: unhandledRejection) ──────────────────');
+  await get('/debug/crash');
+  await wait(200); // allow CrashGuard to emit the event
+
+  console.log('\n[TRAFFIC] ── GET /debug/dns-lookup (dns + possible slow-dns) ──────────────');
+  await get('/debug/dns-lookup');
+  await wait(200);
+
+  console.log('\n[TRAFFIC] ── GET /debug/error-500 (http-server-error hint) ─────────────────');
+  await get('/debug/error-500');
+  await wait(100);
+
+  console.log('\n[TRAFFIC] ── GET /debug/rate-limited (http-rate-limited hint) ──────────────');
+  await get('/debug/rate-limited');
+  await wait(100);
+
+  console.log('\n[TRAFFIC] ── GET /debug/slow-outbound (slow-http-request hint, ~2.5s) ──────');
+  await get('/debug/slow-outbound');
+  await wait(200);
+
   console.log('\n[TRAFFIC] ── Done ───────────────────────────────────────────────────────\n');
 }
 
