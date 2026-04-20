@@ -2,7 +2,7 @@
 
 > **Privacy-first performance diagnostics for Node.js — minimum Node 14.18 as a compiled package, Node 22.6 for source/dev mode**
 
-![Argus demo](https://raw.githubusercontent.com/sharon77242/Argus/main/docs/demo.gif)
+![Argus demo](docs/demo.gif)
 
 A lightweight agent that embeds directly into your application — silently tracking runtime behaviour, isolating bottlenecks, and mathematically sanitizing all context before exporting OpenTelemetry (OTLP) telemetry to your observability stack.
 
