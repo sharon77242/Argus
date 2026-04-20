@@ -682,11 +682,11 @@ export class DiagnosticAgent extends EventEmitter {
         ? { ...traced, suggestions: this.queryAnalyzer.analyze(traced.sanitizedQuery) }
         : traced;
 
-      if (this.slowQueryMonitor) {
+      if (this.slowQueryMonitor && traced.driver) {
         const slow = this.slowQueryMonitor.check(
           traced.sanitizedQuery,
           traced.durationMs,
-          traced.driver ?? "unknown",
+          traced.driver,
           traced.timestamp,
           traced.sourceLine,
           traced.correlationId,
