@@ -2,6 +2,8 @@
 
 > **Privacy-first performance diagnostics for Node.js — minimum Node 14.18 as a compiled package, Node 22.6 for source/dev mode**
 
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink?logo=github)](https://github.com/sponsors/sharon77242)
+
 ![Argus demo](docs/demo.gif)
 
 A lightweight agent that embeds directly into your application — silently tracking runtime behaviour, isolating bottlenecks, and mathematically sanitizing all context before exporting OpenTelemetry (OTLP) telemetry to your observability stack.
@@ -758,6 +760,12 @@ A hosted dashboard with 30-day query history, AI-powered fix suggestions,
 and cross-service correlation is in development.
 
 → Subscribe via [this GitHub issue](https://github.com/sharon77242/Argus/issues) or email [sharon10vp614@gmail.com](mailto:sharon10vp614@gmail.com) to be notified at launch.
+
+---
+
+## Support
+
+If Argus saves you debugging time, consider [sponsoring the project](https://github.com/sponsors/sharon77242) ❤
 
 ---
 
