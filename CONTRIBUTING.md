@@ -56,7 +56,7 @@ pnpm lint:fix         # auto-fix what's fixable
 The agent is structured in five layers:
 
 ```
-DiagnosticAgent (fluent builder + event bus)
+ArgusAgent (fluent builder + event bus)
   │
   ├── Profiling          — runtime observation, crash interception, source maps
   │     RuntimeMonitor    event-loop lag, heap growth (accumulated model)
@@ -110,7 +110,7 @@ DB driver interception uses `node:diagnostics_channel` (the official Node.js obs
 
 ### CrashGuard flush before process.exit
 
-When `DiagnosticAgent.wireGuards()` creates `CrashGuard`, it passes `() => this.stop()` as the `beforeExit` callback. On an `uncaughtException`:
+When `ArgusAgent.wireGuards()` creates `CrashGuard`, it passes `() => this.stop()` as the `beforeExit` callback. On an `uncaughtException`:
 1. The crash event is emitted synchronously (in-process listeners get it).
 2. `beforeExit()` is awaited (max 2 s) so the OTLP exporter can flush.
 3. `process.exit(1)` runs only after the flush or the deadline, whichever comes first.
@@ -175,7 +175,7 @@ This section tracks planned monitoring capabilities — what's already shipped, 
 | Cache hit-rate monitoring | `CacheMonitor` | Sliding-window hit rate, fires `cache-degraded` |
 | Query plan analysis (EXPLAIN) | `ExplainAnalyzer` | User-supplied executor, per-pattern cooldown |
 | DNS resolution monitoring | `DnsMonitor` | `dns.lookup` intercept, `slow-dns` events |
-| Adaptive sampling | `AdaptiveSampler` | Token-bucket per category, wired in `DiagnosticAgent` |
+| Adaptive sampling | `AdaptiveSampler` | Token-bucket per category, wired in `ArgusAgent` |
 | OTLP-compatible export (no mTLS) | `OTLPCompatibleExporter` | Plain http/https, optional bearer token |
 
 ---

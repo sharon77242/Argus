@@ -60,7 +60,7 @@ import { createQueryHandler } from "./internal/query-handler.ts";
 import { installConsoleLogger, type DebugListener } from "./internal/console-logger.ts";
 
 // WeakMap-based private storage for license claims — avoids exposing internal field on agent
-const licenseClaims = new WeakMap<DiagnosticAgent, LicenseClaims>();
+const licenseClaims = new WeakMap<ArgusAgent, LicenseClaims>();
 
 export function shouldExport(eventType: string, claims: LicenseClaims | null): boolean {
   if (!claims) return false; // free mode: local EventEmitter only, no OTLP export
@@ -92,7 +92,7 @@ export interface AgentProfileConfig {
  *
  * @example
  * ```ts
- * const agent = await DiagnosticAgent.create()
+ * const agent = await ArgusAgent.create()
  *   .withSourceMaps('./dist')
  *   .withRuntimeMonitor({ eventLoopThresholdMs: 50 })
  *   .withInstrumentation()
@@ -103,7 +103,7 @@ export interface AgentProfileConfig {
  * agent.stop();
  * ```
  */
-export class DiagnosticAgent extends EventEmitter {
+export class ArgusAgent extends EventEmitter {
   // ── configuration captured by the builder ──
   private globallyDisabled = false;
   private sourceMapDir: string | null = null;
@@ -153,7 +153,7 @@ export class DiagnosticAgent extends EventEmitter {
   // Listeners added by useConsoleLogger — kept so they can be removed on stop().
   private debugListeners: DebugListener[] = [];
 
-  // Private constructor — use DiagnosticAgent.create()
+  // Private constructor — use ArgusAgent.create()
   private constructor() {
     super();
     // High-frequency events (query, http, fs, log) may have many listeners
@@ -164,8 +164,8 @@ export class DiagnosticAgent extends EventEmitter {
   /**
    * Entry point — returns a fresh builder instance.
    */
-  public static create(): DiagnosticAgent {
-    return new DiagnosticAgent();
+  public static create(): ArgusAgent {
+    return new ArgusAgent();
   }
 
   /**
@@ -179,13 +179,13 @@ export class DiagnosticAgent extends EventEmitter {
   }
 
   /**
-   * Generates a preconfigured DiagnosticAgent using highly optimized presets based on environment and application types.
+   * Generates a preconfigured ArgusAgent using highly optimized presets based on environment and application types.
    * Includes an `enabled` flag to return a true zero-overhead NoOp agent.
    *
    * Set `appType` to `'auto'` to auto-detect from `package.json` dependencies.
    */
-  public static createProfile(config: AgentProfileConfig): DiagnosticAgent {
-    const agent = new DiagnosticAgent();
+  public static createProfile(config: AgentProfileConfig): ArgusAgent {
+    const agent = new ArgusAgent();
 
     // Globally kill-switch the agent; .start() and .stop() will become 0-overhead.
     // Environment variables take precedence over the config object.
@@ -500,13 +500,13 @@ export class DiagnosticAgent extends EventEmitter {
       if (checkClockIntegrity(claims.tier, Date.now()) === "rollback") {
         this.emit(
           "error",
-          new Error("DiagnosticAgent: system clock anomaly detected — running in free mode"),
+          new Error("ArgusAgent: system clock anomaly detected — running in free mode"),
         );
       } else {
         licenseClaims.set(this, claims);
         this.emit(
           "info",
-          `DiagnosticAgent: tier=${claims.tier}, exp=${new Date(claims.exp * 1000).toISOString()}`,
+          `ArgusAgent: tier=${claims.tier}, exp=${new Date(claims.exp * 1000).toISOString()}`,
         );
       }
     } catch (err) {
@@ -514,13 +514,10 @@ export class DiagnosticAgent extends EventEmitter {
         writeExpirySignal("Renew at: https://argus.dev/billing");
         this.emit(
           "info",
-          "DiagnosticAgent: license expired — running in free mode. Renew at: https://argus.dev/billing",
+          "ArgusAgent: license expired — running in free mode. Renew at: https://argus.dev/billing",
         );
       } else {
-        this.emit(
-          "error",
-          new Error(`DiagnosticAgent: invalid license — ${(err as Error).message}`),
-        );
+        this.emit("error", new Error(`ArgusAgent: invalid license — ${(err as Error).message}`));
       }
     }
   }

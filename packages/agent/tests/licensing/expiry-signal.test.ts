@@ -32,7 +32,7 @@ describe("writeExpirySignal", () => {
     // Read it and verify content
     const path = writtenToCwd ? cwdPath : expectedPath;
     const content = readFileSync(path, "utf8");
-    assert.ok(content.includes("[DiagnosticAgent]"), "Should contain agent prefix");
+    assert.ok(content.includes("[ArgusAgent]"), "Should contain agent prefix");
     assert.ok(content.includes("Test expiry message"), "Should contain the message");
 
     cleanup(cwdPath);

@@ -1,13 +1,13 @@
 /**
- * Coverage tests for DiagnosticAgent — DIAGNOSTIC_DEBUG, useConsoleLogger,
+ * Coverage tests for ArgusAgent — DIAGNOSTIC_DEBUG, useConsoleLogger,
  * and remaining uncovered start/stop branches.
  */
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { DiagnosticAgent } from "../src/diagnostic-agent.ts";
+import { ArgusAgent } from "../src/argus-agent.ts";
 
-describe("DiagnosticAgent (debug & logger coverage)", () => {
-  let agent: DiagnosticAgent | null = null;
+describe("ArgusAgent (debug & logger coverage)", () => {
+  let agent: ArgusAgent | null = null;
 
   afterEach(async () => {
     if (agent) {
@@ -19,7 +19,7 @@ describe("DiagnosticAgent (debug & logger coverage)", () => {
 
   it("DIAGNOSTIC_DEBUG=true should activate console logger and not throw", async () => {
     process.env.DIAGNOSTIC_DEBUG = "true";
-    agent = await DiagnosticAgent.create()
+    agent = await ArgusAgent.create()
       .withInstrumentation()
       .withHttpTracing()
       .withCrashGuard()
@@ -48,7 +48,7 @@ describe("DiagnosticAgent (debug & logger coverage)", () => {
 
   it("crash event with no error.message should use the event itself", async () => {
     process.env.DIAGNOSTIC_DEBUG = "true";
-    agent = await DiagnosticAgent.create().withCrashGuard().start();
+    agent = await ArgusAgent.create().withCrashGuard().start();
 
     // Emit crash with no error object
     agent.emit("crash", "raw crash string");
@@ -57,7 +57,7 @@ describe("DiagnosticAgent (debug & logger coverage)", () => {
   });
 
   it("start() should be idempotent — second call is a no-op", async () => {
-    agent = await DiagnosticAgent.create().withCrashGuard().start();
+    agent = await ArgusAgent.create().withCrashGuard().start();
     const first = agent.isRunning;
     await agent.start(); // second call
     assert.strictEqual(agent.isRunning, first);

@@ -1,7 +1,7 @@
 /**
  * Scenario: Containerized Web + DB + Worker Node.js App
  *
- * Simulates what happens when DiagnosticAgent is deployed inside a production
+ * Simulates what happens when ArgusAgent is deployed inside a production
  * Docker container running a typical Express-style web API, a PostgreSQL-backed
  * query layer, and a background job processor.
  *
@@ -16,7 +16,7 @@
 import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import diagnostics_channel from "node:diagnostics_channel";
-import { DiagnosticAgent } from "../../src/diagnostic-agent.ts";
+import { ArgusAgent } from "../../src/argus-agent.ts";
 import type { TracedQuery } from "../../src/instrumentation/engine.ts";
 import type { TracedLog } from "../../src/instrumentation/logger.ts";
 import type { TracedHttpRequest } from "../../src/instrumentation/http.ts";
@@ -44,7 +44,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
 
   describe("1. Lifecycle — start, run, stop", () => {
     it("boots with a full web+db+worker mixed profile and stops cleanly", async () => {
-      const agent = DiagnosticAgent.createProfile({
+      const agent = ArgusAgent.createProfile({
         environment: "prod",
         appType: ["web", "db", "worker"],
       });
@@ -60,7 +60,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     });
 
     it("start() is idempotent — calling twice does not throw", async () => {
-      const agent = DiagnosticAgent.create()
+      const agent = ArgusAgent.create()
         .withInstrumentation()
         .withResourceLeakMonitor({ intervalMs: 60_000 });
 
@@ -71,7 +71,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     });
 
     it("stop() is idempotent — calling twice does not throw", async () => {
-      const agent = DiagnosticAgent.create().withCrashGuard();
+      const agent = ArgusAgent.create().withCrashGuard();
       await agent.start();
       agent.stop();
       agent.stop(); // should be safe
@@ -93,7 +93,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     it('is globally disabled when env var is "false"', async () => {
       process.env.DIAGNOSTIC_AGENT_ENABLED = "false";
 
-      const agent = DiagnosticAgent.createProfile({
+      const agent = ArgusAgent.createProfile({
         environment: "prod",
         appType: ["web", "db", "worker"],
       });
@@ -110,7 +110,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     it('is globally disabled when env var is "0"', async () => {
       process.env.DIAGNOSTIC_AGENT_ENABLED = "0";
 
-      const agent = DiagnosticAgent.createProfile({ environment: "prod", appType: "web" });
+      const agent = ArgusAgent.createProfile({ environment: "prod", appType: "web" });
       await agent.start();
       assert.ok(!agent.isRunning);
       agent.stop();
@@ -119,7 +119,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     it('is active when env var is "1"', async () => {
       process.env.DIAGNOSTIC_AGENT_ENABLED = "1";
 
-      const agent = DiagnosticAgent.createProfile({ environment: "prod", appType: "web" });
+      const agent = ArgusAgent.createProfile({ environment: "prod", appType: "web" });
       await agent.start();
       assert.ok(agent.isRunning);
       agent.stop();
@@ -132,7 +132,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     it("captures and sanitizes a diagnostics_channel query event", async () => {
       const captured: TracedQuery[] = [];
 
-      const agent = DiagnosticAgent.create()
+      const agent = ArgusAgent.create()
         .withInstrumentation({ autoPatching: false })
         .withQueryAnalysis();
 
@@ -158,7 +158,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     it("traceQuery() wraps arbitrary async execution and emits an event", async () => {
       const captured: TracedQuery[] = [];
 
-      const agent = DiagnosticAgent.create().withInstrumentation();
+      const agent = ArgusAgent.create().withInstrumentation();
       agent.on("query", (q) => captured.push(q));
       await agent.start();
 
@@ -180,7 +180,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     it("traceQuery() still emits on failure", async () => {
       const captured: TracedQuery[] = [];
 
-      const agent = DiagnosticAgent.create().withInstrumentation();
+      const agent = ArgusAgent.create().withInstrumentation();
       agent.on("query", (q) => captured.push(q));
       await agent.start();
 
@@ -205,7 +205,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     it("scrubs high-entropy secrets from console output", async () => {
       const logEvents: TracedLog[] = [];
 
-      const agent = DiagnosticAgent.create().withLogTracing({ entropyThreshold: 3.5 });
+      const agent = ArgusAgent.create().withLogTracing({ entropyThreshold: 3.5 });
       agent.on("log", (l) => logEvents.push(l));
       await agent.start();
 
@@ -227,7 +227,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     it("agent starts with HTTP tracing enabled without errors", async () => {
       const httpEvents: TracedHttpRequest[] = [];
 
-      const agent = DiagnosticAgent.create().withHttpTracing().withInstrumentation();
+      const agent = ArgusAgent.create().withHttpTracing().withInstrumentation();
 
       agent.on("http", (r) => httpEvents.push(r));
       await agent.start();
@@ -245,7 +245,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     it("crash guard enables and disables cleanly", async () => {
       const crashEvents: CrashEvent[] = [];
 
-      const agent = DiagnosticAgent.create().withCrashGuard();
+      const agent = ArgusAgent.create().withCrashGuard();
       agent.on("crash", (e) => crashEvents.push(e));
 
       await agent.start();
@@ -264,7 +264,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     it("starts and stops the leak monitor without error", async () => {
       const leakEvents: ResourceLeakEvent[] = [];
 
-      const agent = DiagnosticAgent.create().withResourceLeakMonitor({
+      const agent = ArgusAgent.create().withResourceLeakMonitor({
         handleThreshold: 1, // Deliberately low so it could fire
         intervalMs: 50,
         alertCooldownMs: 0,
@@ -292,7 +292,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
   // ── 8. Full "Container Boot" Scenario ─────────────────────────────────────
 
   describe("8. Full container boot — end-to-end smoke test", () => {
-    let agent: DiagnosticAgent;
+    let agent: ArgusAgent;
     const events: Record<string, any[]> = {
       query: [],
       log: [],
@@ -301,7 +301,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     };
 
     before(async () => {
-      agent = DiagnosticAgent.createProfile({
+      agent = ArgusAgent.createProfile({
         environment: "prod",
         appType: ["web", "db", "worker"],
       });

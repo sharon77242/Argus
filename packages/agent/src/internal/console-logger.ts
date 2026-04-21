@@ -1,7 +1,7 @@
 /**
- * Console debug logger for DiagnosticAgent.
+ * Console debug logger for ArgusAgent.
  *
- * Extracted from DiagnosticAgent to keep the main class focused on lifecycle.
+ * Extracted from ArgusAgent to keep the main class focused on lifecycle.
  * When DIAGNOSTIC_DEBUG=true the agent calls installConsoleLogger() once during
  * start() — all registered listeners are returned so the agent can remove them
  * on stop() without leaking event subscriptions.
@@ -19,7 +19,7 @@ export type DebugListener = [string, (...args: unknown[]) => void];
  * Registers coloured console output for every agent event and returns the
  * registered listener pairs so the caller can remove them on shutdown.
  *
- * @param emitter   The DiagnosticAgent instance (typed as EventEmitter to avoid circular dep).
+ * @param emitter   The ArgusAgent instance (typed as EventEmitter to avoid circular dep).
  * @param prefix    Log line prefix — default `"[DiagAgent]"`.
  * @param level     `"warn"` — anomalies/crashes/errors only.
  *                  `"verbose"` — also logs every query and HTTP request.

@@ -1,7 +1,7 @@
 /**
  * Query event handler factory.
  *
- * Extracts the dense per-query processing logic out of DiagnosticAgent so that
+ * Extracts the dense per-query processing logic out of ArgusAgent so that
  * wireInstrumentationEngine() becomes a lean wiring step, not a policy file.
  *
  * The handler is constructed once per agent start() and registered on the engine's

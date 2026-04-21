@@ -49,7 +49,7 @@ export interface PatchRecord {
 
 export const activePatches: PatchRecord[] = [];
 
-export const PATCHED_SYMBOL = Symbol.for("diagnostic-agent.patched");
+export const PATCHED_SYMBOL = Symbol.for("argus-agent.patched");
 
 export function isAlreadyPatched(target: AnyTarget, methodName: string): boolean {
   return (target[methodName] as Record<symbol, unknown>)[PATCHED_SYMBOL] === true;

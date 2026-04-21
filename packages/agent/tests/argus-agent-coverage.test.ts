@@ -1,5 +1,5 @@
 /**
- * Additional coverage tests for DiagnosticAgent
+ * Additional coverage tests for ArgusAgent
  * Targets uncovered lines:
  *   - 207-209: aggregator flush → exporter error path (emits 'error')
  *   - 326-343: exporter wired to aggregator flush
@@ -21,7 +21,7 @@ import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createSign, generateKeyPairSync } from "node:crypto";
-import { DiagnosticAgent } from "../src/diagnostic-agent.ts";
+import { ArgusAgent } from "../src/argus-agent.ts";
 import { BUNDLED_PUBLIC_KEYS } from "../src/licensing/public-key.ts";
 import http from "node:http";
 import { type AddressInfo } from "node:net";
@@ -60,8 +60,8 @@ function makeDevLicense(allowedEvents: string[]): string {
   return `${h}.${p}.${b64u(s.sign(_devPrivKey))}`;
 }
 
-describe("DiagnosticAgent (extended coverage)", () => {
-  let agent: DiagnosticAgent | null = null;
+describe("ArgusAgent (extended coverage)", () => {
+  let agent: ArgusAgent | null = null;
 
   afterEach(() => {
     agent?.stop();
@@ -73,7 +73,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
     const orig = process.env.DIAGNOSTIC_AGENT_ENABLED;
     process.env.DIAGNOSTIC_AGENT_ENABLED = "false";
     try {
-      agent = DiagnosticAgent.createProfile({ enabled: true }); // config says enabled but env overrides
+      agent = ArgusAgent.createProfile({ enabled: true }); // config says enabled but env overrides
       await agent.start();
       assert.strictEqual(agent.isRunning, false);
     } finally {
@@ -86,7 +86,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
     const orig = process.env.DIAGNOSTIC_AGENT_ENABLED;
     process.env.DIAGNOSTIC_AGENT_ENABLED = "0";
     try {
-      agent = DiagnosticAgent.createProfile({});
+      agent = ArgusAgent.createProfile({});
       await agent.start();
       assert.strictEqual(agent.isRunning, false);
     } finally {
@@ -99,7 +99,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
     const orig = process.env.DIAGNOSTIC_AGENT_ENABLED;
     process.env.DIAGNOSTIC_AGENT_ENABLED = "true";
     try {
-      agent = await DiagnosticAgent.createProfile({ environment: "prod", appType: "web" }).start();
+      agent = await ArgusAgent.createProfile({ environment: "prod", appType: "web" }).start();
       assert.strictEqual(agent.isRunning, true);
     } finally {
       if (orig === undefined) delete process.env.DIAGNOSTIC_AGENT_ENABLED;
@@ -109,7 +109,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
 
   // ── withAggregatorWindow + withEntropyThreshold affect logTracingOptions ───
   it("should propagate entropyThreshold to logger when not explicitly set", async () => {
-    agent = await DiagnosticAgent.create()
+    agent = await ArgusAgent.create()
       .withEntropyThreshold(2.5)
       .withLogTracing() // no threshold set → should inherit from agent
       .start();
@@ -120,7 +120,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
   });
 
   it("should NOT overwrite an explicit entropyThreshold in logTracingOptions", async () => {
-    agent = await DiagnosticAgent.create()
+    agent = await ArgusAgent.create()
       .withEntropyThreshold(2.0)
       .withLogTracing({ entropyThreshold: 5.0 }) // explicit override
       .start();
@@ -132,7 +132,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
 
   // ── monitor anomaly passthrough ──────────────────────────────────────────
   it("should forward monitor anomaly to agent emit and aggregator", async () => {
-    agent = await DiagnosticAgent.create()
+    agent = await ArgusAgent.create()
       .withRuntimeMonitor({
         checkIntervalMs: 50,
         eventLoopThresholdMs: 1, // very low to trigger easily
@@ -163,7 +163,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
 
   // ── HTTP 'request' event → aggregator + agent emit ────────────────────────
   it("should forward http instrumentation events to agent", async () => {
-    agent = await DiagnosticAgent.create().withHttpTracing().withAggregatorWindow(60_000).start();
+    agent = await ArgusAgent.create().withHttpTracing().withAggregatorWindow(60_000).start();
 
     const httpPromise = once(agent, "http");
 
@@ -193,7 +193,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
 
   // ── FS 'fs' event → aggregator + agent emit ───────────────────────────────
   it("should forward fs instrumentation events to agent", async () => {
-    agent = await DiagnosticAgent.create().withFsTracing().start();
+    agent = await ArgusAgent.create().withFsTracing().start();
 
     const fsPromise = once(agent, "fs");
 
@@ -213,7 +213,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
 
   // ── Log 'log' event → aggregator + agent emit ─────────────────────────────
   it("should forward log instrumentation events to agent", async () => {
-    agent = await DiagnosticAgent.create().withLogTracing().start();
+    agent = await ArgusAgent.create().withLogTracing().start();
 
     const logPromise = once(agent, "log");
     console.log("test log message from agent coverage test");
@@ -232,7 +232,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
   it("should forward CrashGuard crash events to agent", async () => {
     process.env.NODE_ENV = "test";
 
-    agent = await DiagnosticAgent.create().withCrashGuard().start();
+    agent = await ArgusAgent.create().withCrashGuard().start();
 
     const crashPromise = once(agent, "crash");
 
@@ -251,7 +251,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
   // ── Leak 'leak' event (line 445) ─────────────────────────────────────────
   it("should forward ResourceLeakMonitor leak events to agent", async () => {
     // Use a very low threshold — the process always has at least a few active handles
-    agent = await DiagnosticAgent.create()
+    agent = await ArgusAgent.create()
       .withResourceLeakMonitor({ handleThreshold: 1, intervalMs: 30 })
       .start();
 
@@ -277,7 +277,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
       const emptyMap = JSON.stringify({ version: 3, sources: [], mappings: "" });
       fs.writeFileSync(path.join(tempDir, "mini.js.map"), emptyMap);
 
-      agent = await DiagnosticAgent.create().withSourceMaps(tempDir).start();
+      agent = await ArgusAgent.create().withSourceMaps(tempDir).start();
 
       // resolvePosition with an unmapped file → should return null (not throw)
       const result = await agent.resolvePosition("/nonexistent.js", 1, 0);
@@ -292,7 +292,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
     // The static scan is fire-and-forget; a bad dir causes tsc to fail, but the
     // scan() promise itself resolves (it doesn't reject). The agent should still
     // start cleanly.
-    agent = DiagnosticAgent.create().withStaticScanner("/nonexistent_dir_$$");
+    agent = ArgusAgent.create().withStaticScanner("/nonexistent_dir_$$");
     // Suppress any error events to avoid unhandled listener warnings
     agent.on("error", () => {
       /* suppress */
@@ -311,7 +311,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
   // ── Audit scan error path (line 456) ──────────────────────────────────
   it("should not crash when audit scanner is pointed at a bad dir", async () => {
     // audit scanner resolves null on errors; the agent should still start
-    agent = DiagnosticAgent.create().withAuditScanner("/nonexistent_dir_audit_$$");
+    agent = ArgusAgent.create().withAuditScanner("/nonexistent_dir_audit_$$");
     agent.on("error", () => {
       /* suppress */
     });
@@ -328,7 +328,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
     // shouldExport() requires a valid license — use dev-k1 with 'test-metric' allowed
     process.env.DIAGNOSTIC_LICENSE_KEY = makeDevLicense(["test-metric"]);
     try {
-      agent = await DiagnosticAgent.create()
+      agent = await ArgusAgent.create()
         .withExporter({
           endpointUrl: "https://127.0.0.1:0/nonexistent", // will fail to connect
           ca: "ca",
@@ -361,7 +361,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
 
   // ── withInstrumentation + queryAnalysis: engine enriches query ────────────
   it("should enrich traced queries with fix suggestions when queryAnalysis enabled", async () => {
-    agent = await DiagnosticAgent.create().withInstrumentation().withQueryAnalysis().start();
+    agent = await ArgusAgent.create().withInstrumentation().withQueryAnalysis().start();
 
     const queryPromise = once(agent, "query");
     await agent.traceQuery("SELECT * FROM users", async () => "done");
@@ -377,14 +377,14 @@ describe("DiagnosticAgent (extended coverage)", () => {
 
   // ── withInstrumentation: autoPatching is removed on stop ─────────────────
   it("should call removeDriverPatches on stop() when autoPatching was enabled", async () => {
-    agent = await DiagnosticAgent.create().withInstrumentation({ autoPatching: true }).start();
+    agent = await ArgusAgent.create().withInstrumentation({ autoPatching: true }).start();
     // stop() should cleanly remove driver patches — just verify no throw
     assert.doesNotThrow(() => agent!.stop());
   });
 
   // ── Bug Fix #3 regression: stop() must null out ALL subsystem references ──
   it("[BUG FIX] stop() should null out all subsystem instance references", async () => {
-    agent = await DiagnosticAgent.create()
+    agent = await ArgusAgent.create()
       .withHttpTracing()
       .withFsTracing()
       .withLogTracing()
@@ -409,7 +409,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
     // All references must be null after stop()
     const _stopped = agent as any; // agent is null — check via temporary
     // Re-read via closure trick: create a new agent, stop it, inspect
-    const a = await DiagnosticAgent.create()
+    const a = await ArgusAgent.create()
       .withHttpTracing()
       .withFsTracing()
       .withLogTracing()
@@ -436,7 +436,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
   it("[FIX] createProfile with auto and no detected types should NOT attach web-specific modules", async () => {
     // Point workspaceDir at a directory with no package.json to force empty detection
     const emptyDir = os.tmpdir();
-    agent = DiagnosticAgent.createProfile({
+    agent = ArgusAgent.createProfile({
       environment: "prod",
       appType: "auto",
       workspaceDir: emptyDir,
@@ -471,7 +471,7 @@ describe("DiagnosticAgent (extended coverage)", () => {
       JSON.stringify({ name: "empty-test", dependencies: {} }),
     );
 
-    agent = DiagnosticAgent.createProfile({
+    agent = ArgusAgent.createProfile({
       environment: "dev",
       appType: "auto",
       workspaceDir,
@@ -506,8 +506,8 @@ describe("DiagnosticAgent (extended coverage)", () => {
   });
 
   // ── [FIX] setMaxListeners(0): no false memory leak warnings ────────────────
-  it("[FIX] DiagnosticAgent should have unlimited listeners (setMaxListeners(0))", () => {
-    const a = DiagnosticAgent.create();
+  it("[FIX] ArgusAgent should have unlimited listeners (setMaxListeners(0))", () => {
+    const a = ArgusAgent.create();
     assert.strictEqual(
       a.getMaxListeners(),
       0,

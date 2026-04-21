@@ -1,24 +1,24 @@
 /**
- * Profile factory — pure configuration logic for DiagnosticAgent.createProfile().
+ * Profile factory — pure configuration logic for ArgusAgent.createProfile().
  *
- * Kept separate from DiagnosticAgent to keep the main class focused on lifecycle
+ * Kept separate from ArgusAgent to keep the main class focused on lifecycle
  * and public API, not preset decision-making.
  */
 
-import type { DiagnosticAgent, AgentProfileConfig, AppType } from "../diagnostic-agent.ts";
+import type { ArgusAgent, AgentProfileConfig, AppType } from "../argus-agent.ts";
 import { detectAppTypes } from "../profiling/app-type-detector.ts";
 
 /**
  * Applies profile-based configuration to an already-constructed (but not yet started)
- * `DiagnosticAgent` instance. Calls only the agent's public builder methods.
+ * `ArgusAgent` instance. Calls only the agent's public builder methods.
  *
  * Separated from the static `createProfile()` factory so the decision logic can be
  * tested and reasoned about independently of the class lifecycle.
  *
- * @param agent  Fresh `DiagnosticAgent` instance (pre-disabled check done by caller).
+ * @param agent  Fresh `ArgusAgent` instance (pre-disabled check done by caller).
  * @param config Profile configuration from the caller.
  */
-export function buildAgentProfile(agent: DiagnosticAgent, config: AgentProfileConfig): void {
+export function buildAgentProfile(agent: ArgusAgent, config: AgentProfileConfig): void {
   const env = config.environment ?? "prod";
 
   // Resolve app types — 'auto' triggers package.json scanning
@@ -38,7 +38,7 @@ export function buildAgentProfile(agent: DiagnosticAgent, config: AgentProfileCo
         setImmediate(() => {
           agent.emit(
             "info",
-            "DiagnosticAgent: auto-detection found no recognized app type in package.json. " +
+            "ArgusAgent: auto-detection found no recognized app type in package.json. " +
               'Pass appType explicitly ("web" | "db" | "worker") to enable app-specific monitoring.',
           );
         });

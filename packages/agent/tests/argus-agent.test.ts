@@ -1,7 +1,7 @@
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createSign, generateKeyPairSync } from "node:crypto";
-import { DiagnosticAgent } from "../src/diagnostic-agent.ts";
+import { ArgusAgent } from "../src/argus-agent.ts";
 import { BUNDLED_PUBLIC_KEYS } from "../src/licensing/public-key.ts";
 
 // ── Helpers for JWT generation in tests ──────────────────────────────────────
@@ -30,8 +30,8 @@ const BASE_CLAIMS = {
   sampleRates: {},
 };
 
-describe("DiagnosticAgent (builder pattern)", () => {
-  let agent: DiagnosticAgent | null = null;
+describe("ArgusAgent (builder pattern)", () => {
+  let agent: ArgusAgent | null = null;
 
   afterEach(async () => {
     await agent?.stop();
@@ -40,7 +40,7 @@ describe("DiagnosticAgent (builder pattern)", () => {
   });
 
   it("should start and stop with minimal configuration", async () => {
-    agent = await DiagnosticAgent.create().start();
+    agent = await ArgusAgent.create().start();
 
     assert.strictEqual(agent.isRunning, true);
     await agent.stop();
@@ -48,7 +48,7 @@ describe("DiagnosticAgent (builder pattern)", () => {
   });
 
   it("should accept chained configuration without errors", async () => {
-    agent = await DiagnosticAgent.create()
+    agent = await ArgusAgent.create()
       .withRuntimeMonitor({ checkIntervalMs: 200, eventLoopThresholdMs: 100 })
       .withInstrumentation()
       .withAggregatorWindow(5000)
@@ -62,7 +62,7 @@ describe("DiagnosticAgent (builder pattern)", () => {
   });
 
   it("should throw when calling traceQuery without instrumentation", async () => {
-    agent = await DiagnosticAgent.create().start();
+    agent = await ArgusAgent.create().start();
 
     await assert.rejects(() => agent!.traceQuery("SELECT 1", async () => "ok"), {
       message: /Instrumentation is not enabled/,
@@ -70,7 +70,7 @@ describe("DiagnosticAgent (builder pattern)", () => {
   });
 
   it("should throw when calling resolvePosition without source maps", async () => {
-    agent = await DiagnosticAgent.create().start();
+    agent = await ArgusAgent.create().start();
 
     await assert.rejects(() => agent!.resolvePosition("foo.js", 1, 0), {
       message: /Source maps are not enabled/,
@@ -78,7 +78,7 @@ describe("DiagnosticAgent (builder pattern)", () => {
   });
 
   it("should allow traceQuery when instrumentation is enabled", async () => {
-    agent = await DiagnosticAgent.create().withInstrumentation().withAggregatorWindow(100);
+    agent = await ArgusAgent.create().withInstrumentation().withAggregatorWindow(100);
 
     await agent.start();
 
@@ -90,7 +90,7 @@ describe("DiagnosticAgent (builder pattern)", () => {
   });
 
   it("should be idempotent on double start / double stop", async () => {
-    agent = await DiagnosticAgent.create().withRuntimeMonitor({ checkIntervalMs: 500 });
+    agent = await ArgusAgent.create().withRuntimeMonitor({ checkIntervalMs: 500 });
 
     await agent.start();
     await agent.start(); // second start is a no-op
@@ -106,7 +106,7 @@ describe("DiagnosticAgent (builder pattern)", () => {
   // ── New Phase 0 tests ──────────────────────────────────────────────────────
 
   it(".withGracefulShutdown() builder method exists and returns this for chaining", () => {
-    const a = DiagnosticAgent.create();
+    const a = ArgusAgent.create();
     const result = a.withGracefulShutdown();
     assert.strictEqual(result, a, ".withGracefulShutdown() should return this for chaining");
     result.withGracefulShutdown({ timeoutMs: 3000 }); // accepts options
@@ -120,7 +120,7 @@ describe("DiagnosticAgent (builder pattern)", () => {
     process.env.DIAGNOSTIC_LICENSE_KEY = jwt;
 
     const messages: string[] = [];
-    agent = DiagnosticAgent.create();
+    agent = ArgusAgent.create();
     agent.on("info", (m: string) => messages.push(m));
     await agent.start();
 
@@ -138,7 +138,7 @@ describe("DiagnosticAgent (builder pattern)", () => {
     process.env.DIAGNOSTIC_LICENSE_KEY = jwt;
 
     const messages: string[] = [];
-    agent = DiagnosticAgent.create();
+    agent = ArgusAgent.create();
     agent.on("info", (m: string) => messages.push(m));
 
     // Must not throw
@@ -154,7 +154,7 @@ describe("DiagnosticAgent (builder pattern)", () => {
     process.env.DIAGNOSTIC_LICENSE_KEY = "not.a.valid.jwt.atall";
 
     const errors: unknown[] = [];
-    agent = DiagnosticAgent.create();
+    agent = ArgusAgent.create();
     agent.on("error", (e: unknown) => errors.push(e));
 
     // Must not throw

@@ -87,13 +87,13 @@ This package ships a **dual build**: ESM and CommonJS. Node.js picks the right f
 
 ```js
 // ✅ ESM project (type:module or .mjs)
-import { DiagnosticAgent } from 'argus';
+import { ArgusAgent } from 'argus';
 
 // ✅ CommonJS project — require() works directly
-const { DiagnosticAgent } = require('argus');
+const { ArgusAgent } = require('argus');
 
 // ✅ CommonJS project — dynamic import also works
-const { DiagnosticAgent } = await import('argus');
+const { ArgusAgent } = await import('argus');
 ```
 
 ---
@@ -109,7 +109,7 @@ npm install argus
 Then import from the compiled entry point:
 
 ```typescript
-import { DiagnosticAgent } from 'argus';
+import { ArgusAgent } from 'argus';
 ```
 
 ### Building from source (Node ≥ 22.6, contributors only)
@@ -152,12 +152,12 @@ dist/
 
 ```typescript
 // Compiled npm package
-import { DiagnosticAgent } from 'argus';
+import { ArgusAgent } from 'argus';
 
 // Or if running source directly (Node 22.6+)
-// import { DiagnosticAgent } from './packages/agent/src/index.ts';
+// import { ArgusAgent } from './packages/agent/src/index.ts';
 
-const agent = await DiagnosticAgent.createProfile({
+const agent = await ArgusAgent.createProfile({
   environment: 'prod',   // or 'dev' | 'test'
   appType: ['web', 'db'],
 }).start();
@@ -195,7 +195,7 @@ See [`quotes-demo-app/README.md`](quotes-demo-app/README.md) for the full setup 
 `createProfile` returns a pre-configured builder instance wired for your environment and app type. Call `.start()` to initialize all subsystems.
 
 ```typescript
-const agent = await DiagnosticAgent.createProfile({
+const agent = await ArgusAgent.createProfile({
   environment: 'prod',        // 'dev' | 'test' | 'prod'
   appType: ['web', 'db'],     // single string or array — modules are unioned
   enabled: true,              // overridden by DIAGNOSTIC_AGENT_ENABLED env-var
@@ -227,13 +227,13 @@ Each `.with*()` call is **idempotent** — combining types never double-register
 
 ```typescript
 // Express API + background job runner
-DiagnosticAgent.createProfile({ appType: ['web', 'worker'] });
+ArgusAgent.createProfile({ appType: ['web', 'worker'] });
 
 // Worker that queries databases directly
-DiagnosticAgent.createProfile({ appType: ['db', 'worker'] });
+ArgusAgent.createProfile({ appType: ['db', 'worker'] });
 
 // Monolith — full coverage
-DiagnosticAgent.createProfile({ appType: ['web', 'db', 'worker'] });
+ArgusAgent.createProfile({ appType: ['web', 'db', 'worker'] });
 ```
 
 ### Auto-Detection
@@ -241,7 +241,7 @@ DiagnosticAgent.createProfile({ appType: ['web', 'db', 'worker'] });
 Leave `appType` unset (or set it to `'auto'`) and the agent will scan your `package.json` dependencies to infer the correct profile:
 
 ```typescript
-const agent = await DiagnosticAgent.createProfile({
+const agent = await ArgusAgent.createProfile({
   environment: 'prod',
   // appType: 'auto' is the default
 }).start();
@@ -252,7 +252,7 @@ const agent = await DiagnosticAgent.createProfile({
 You can also call the detector standalone:
 
 ```typescript
-const result = DiagnosticAgent.detectAppTypes('./my-service');
+const result = ArgusAgent.detectAppTypes('./my-service');
 // { types: ['web', 'db'], matches: { web: ['express', 'cors'], db: ['pg', 'ioredis'], worker: [] } }
 ```
 
@@ -274,10 +274,10 @@ const result = DiagnosticAgent.detectAppTypes('./my-service');
 For maximum control, compose the agent manually using the fluent builder:
 
 ```typescript
-import { DiagnosticAgent } from 'argus';
+import { ArgusAgent } from 'argus';
 import fs from 'node:fs';
 
-const agent = await DiagnosticAgent.create()
+const agent = await ArgusAgent.create()
   .withSourceMaps('./dist')                          // Source-map resolution for stack traces
   .withRuntimeMonitor({ eventLoopThresholdMs: 50 }) // Event loop lag + memory leak detection
   .withInstrumentation({ autoPatching: true })       // 16 DB drivers via diagnostics_channel
@@ -468,7 +468,7 @@ Requires `.withSourceMaps()`.
 
 ## Events Reference
 
-The agent is an `EventEmitter`. All events are emitted on the `DiagnosticAgent` instance:
+The agent is an `EventEmitter`. All events are emitted on the `ArgusAgent` instance:
 
 | Event | Payload | When |
 |---|---|---|
@@ -527,7 +527,7 @@ agent.on('pool-exhaustion', (event) => {
 ```
 
 > [!NOTE]
-> `DiagnosticAgent` calls `setMaxListeners(0)` internally — you can attach as many listeners as needed without triggering Node's memory leak warning.
+> `ArgusAgent` calls `setMaxListeners(0)` internally — you can attach as many listeners as needed without triggering Node's memory leak warning.
 
 ---
 
@@ -557,8 +557,8 @@ All thresholds can be overridden without code changes, making the agent CI/CD an
 
 | Method | Prod Safe? | Resource Impact | Description |
 |---|---|---|---|
-| `DiagnosticAgent.createProfile(config)` | ✅ Yes | N/A | Pre-configured instance from env/app presets |
-| `DiagnosticAgent.create()` | ✅ Yes | N/A | Unconfigured fluent builder |
+| `ArgusAgent.createProfile(config)` | ✅ Yes | N/A | Pre-configured instance from env/app presets |
+| `ArgusAgent.create()` | ✅ Yes | N/A | Unconfigured fluent builder |
 | `.withSourceMaps(dir?)` | ✅ Yes | Very Low | Source-map resolution for minified stack traces |
 | `.withRuntimeMonitor(opts?)` | ✅ Yes | Low | Event loop lag + memory leak detection |
 | `.withCrashGuard()` | ✅ Yes | Very Low | Intercepts `uncaughtException`; emits event for `unhandledRejection` |
@@ -617,7 +617,7 @@ Telemetry is exported over **mTLS** (Mutual TLS) — both client and server cert
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                        DiagnosticAgent                            │  ← Fluent builder / event bus
+│                        ArgusAgent                            │  ← Fluent builder / event bus
 ├──────────────────┬─────────────────────────┬─────────────────────┤
 │ Profiling        │  Instrumentation         │  Analysis           │
 │ ──────────────── │  ─────────────────────  │  ─────────────────  │
@@ -800,7 +800,7 @@ docker compose -f docker-compose.jaeger.yml up -d
 Then point the agent at it:
 
 ```typescript
-const agent = await DiagnosticAgent.createProfile({ environment: 'dev', appType: ['web', 'db'] })
+const agent = await ArgusAgent.createProfile({ environment: 'dev', appType: ['web', 'db'] })
   .withExporter({ endpointUrl: 'http://localhost:4318/v1/traces' })   // no TLS needed locally
   .start();
 ```

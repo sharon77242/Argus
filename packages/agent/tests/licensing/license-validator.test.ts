@@ -227,21 +227,21 @@ describe("dev-k1 embedded key integration", () => {
 
 describe("shouldExport", () => {
   test("event in allowedEvents returns true", async () => {
-    const { shouldExport } = await import("../../src/diagnostic-agent.ts");
+    const { shouldExport } = await import("../../src/argus-agent.ts");
     const claims = { ...validClaims } as Parameters<typeof shouldExport>[1];
     assert.equal(shouldExport("query", claims), true);
     assert.equal(shouldExport("http", claims), true);
   });
 
   test("event not in allowedEvents returns false", async () => {
-    const { shouldExport } = await import("../../src/diagnostic-agent.ts");
+    const { shouldExport } = await import("../../src/argus-agent.ts");
     const claims = { ...validClaims } as Parameters<typeof shouldExport>[1];
     assert.equal(shouldExport("fs", claims), false);
     assert.equal(shouldExport("unknown-event", claims), false);
   });
 
   test("null claims (free mode) always returns false", async () => {
-    const { shouldExport } = await import("../../src/diagnostic-agent.ts");
+    const { shouldExport } = await import("../../src/argus-agent.ts");
     assert.equal(shouldExport("query", null), false);
     assert.equal(shouldExport("http", null), false);
   });

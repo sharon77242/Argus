@@ -80,7 +80,7 @@ export class CrashGuard extends EventEmitter {
     // the process — the app (or its framework) may have its own rejection handling.
     if (type === "uncaughtException") {
       // Flush telemetry before shutting down. If a beforeExit hook is registered
-      // (e.g. DiagnosticAgent.stop()), await it; fall back to a 100 ms blind wait
+      // (e.g. ArgusAgent.stop()), await it; fall back to a 100 ms blind wait
       // so the exit is never blocked indefinitely on a broken flush path.
       const flushAndExit = async () => {
         try {

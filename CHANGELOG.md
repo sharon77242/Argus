@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Architecture — God object split**: Extracted three cohesive modules from the 1 109-line
   `diagnostic-agent.ts`:
   - `src/internal/profile-factory.ts` — `buildAgentProfile()` contains all preset-resolution
-    and builder-wiring logic for `DiagnosticAgent.createProfile()`.
+    and builder-wiring logic for `ArgusAgent.createProfile()`.
   - `src/internal/query-handler.ts` — `createQueryHandler()` factory produces the per-query
     processing closure (adaptive sampling → query analysis → slow-query check → aggregation).
   - `src/internal/console-logger.ts` — `installConsoleLogger()` registers formatted console
@@ -44,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 #### Core agent
-- `DiagnosticAgent` fluent builder with two entry points: `create()` (manual) and
+- `ArgusAgent` fluent builder with two entry points: `create()` (manual) and
   `createProfile()` (preset-based).
 - Zero-overhead global kill-switch via `DIAGNOSTIC_AGENT_ENABLED=false` — `.start()` becomes
   a no-op with no timer, subscription, or memory overhead.
@@ -54,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Three environment presets: `prod`, `dev`, `test`.
 - Three app-type presets: `web`, `db`, `worker` (composable as an array).
 - `'auto'` mode — scans `package.json` dependencies and infers the correct preset.
-- `DiagnosticAgent.detectAppTypes()` standalone detector.
+- `ArgusAgent.detectAppTypes()` standalone detector.
 
 #### Instrumentation
 - `node:diagnostics_channel`-based query tracing for 14 DB drivers: `pg`, `mysql2`, `mssql`,

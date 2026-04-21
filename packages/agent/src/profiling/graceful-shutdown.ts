@@ -1,4 +1,4 @@
-import type { DiagnosticAgent } from "../diagnostic-agent.ts";
+import type { ArgusAgent } from "../argus-agent.ts";
 
 export interface GracefulShutdownOptions {
   timeoutMs?: number;
@@ -13,7 +13,7 @@ export interface GracefulShutdownOptions {
 export class GracefulShutdown {
   private registered = false;
 
-  register(agent: DiagnosticAgent, opts: GracefulShutdownOptions = {}): void {
+  register(agent: ArgusAgent, opts: GracefulShutdownOptions = {}): void {
     if (this.registered) return;
     this.registered = true;
     const timeout = opts.timeoutMs ?? 5000;
@@ -27,14 +27,14 @@ export class GracefulShutdown {
       };
 
       try {
-        agent.emit("info", `DiagnosticAgent: ${signal} received — flushing telemetry`);
+        agent.emit("info", `ArgusAgent: ${signal} received — flushing telemetry`);
       } catch {
         // listener threw — proceed to flush anyway
       }
 
       const timer = setTimeout(() => {
         try {
-          agent.emit("info", "DiagnosticAgent: flush timeout — exiting");
+          agent.emit("info", "ArgusAgent: flush timeout — exiting");
         } catch {
           // ignore
         }

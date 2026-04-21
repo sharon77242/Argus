@@ -2,7 +2,7 @@
 
 Run with: `node simulate.js` (requires Postgres; see `docker-compose-pg-only.yml`).
 
-The simulator boots an Express server, attaches the DiagnosticAgent, then replays the traffic sequence below. Each scenario triggers a specific agent feature and prints a labelled event to the terminal.
+The simulator boots an Express server, attaches the ArgusAgent, then replays the traffic sequence below. Each scenario triggers a specific agent feature and prints a labelled event to the terminal.
 
 ---
 

@@ -2,9 +2,9 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { GracefulShutdown } from "../../src/profiling/graceful-shutdown.ts";
-import type { DiagnosticAgent } from "../../src/diagnostic-agent.ts";
+import type { ArgusAgent } from "../../src/argus-agent.ts";
 
-// Minimal DiagnosticAgent stub for testing
+// Minimal ArgusAgent stub for testing
 function makeAgentStub() {
   const agent = new EventEmitter() as EventEmitter & {
     stop: () => Promise<void>;
@@ -14,13 +14,13 @@ function makeAgentStub() {
   agent.stop = async () => {
     agent.stopCallCount++;
   };
-  return agent as unknown as DiagnosticAgent & { stopCallCount: number };
+  return agent as unknown as ArgusAgent & { stopCallCount: number };
 }
 
 function makeHangingAgentStub() {
   const agent = new EventEmitter() as EventEmitter & { stop: () => Promise<void> };
   agent.stop = () => new Promise<void>(() => {}); // never resolves
-  return agent as unknown as DiagnosticAgent;
+  return agent as unknown as ArgusAgent;
 }
 
 // Intercepts process.exit for the duration of fn(), restores it after.

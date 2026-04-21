@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { AppType } from "../diagnostic-agent.ts";
+import type { AppType } from "../argus-agent.ts";
 
 /**
  * Known package fingerprints mapped to each app type.

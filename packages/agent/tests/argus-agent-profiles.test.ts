@@ -1,11 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { DiagnosticAgent, type AgentProfileConfig } from "../src/diagnostic-agent.ts";
+import { ArgusAgent, type AgentProfileConfig } from "../src/argus-agent.ts";
 
-describe("DiagnosticAgent Profiles", () => {
+describe("ArgusAgent Profiles", () => {
   it("should return a zero-overhead NoOp agent when enabled is false", async () => {
     const config: AgentProfileConfig = { enabled: false };
-    const agent = DiagnosticAgent.createProfile(config);
+    const agent = ArgusAgent.createProfile(config);
 
     // Test that bindings can be called without error
     agent.withHttpTracing().withCrashGuard();
@@ -23,19 +23,19 @@ describe("DiagnosticAgent Profiles", () => {
       workspaceDir: process.cwd(),
       appType: "web",
     };
-    const agent = DiagnosticAgent.createProfile(config);
+    const agent = ArgusAgent.createProfile(config);
     assert.ok(agent);
   });
 
   it("should enable DB profile bounds without error", () => {
     const config: AgentProfileConfig = { environment: "prod", appType: "db" };
-    const agent = DiagnosticAgent.createProfile(config);
+    const agent = ArgusAgent.createProfile(config);
     assert.ok(agent);
   });
 
   it("should enable Worker profile bounds without error", () => {
     const config: AgentProfileConfig = { environment: "prod", appType: "worker" };
-    const agent = DiagnosticAgent.createProfile(config);
+    const agent = ArgusAgent.createProfile(config);
     assert.ok(agent);
   });
 
@@ -43,19 +43,19 @@ describe("DiagnosticAgent Profiles", () => {
 
   it("should accept an array of app types (web + db)", () => {
     const config: AgentProfileConfig = { environment: "prod", appType: ["web", "db"] };
-    const agent = DiagnosticAgent.createProfile(config);
+    const agent = ArgusAgent.createProfile(config);
     assert.ok(agent);
   });
 
   it("should accept an array of app types (web + worker)", () => {
     const config: AgentProfileConfig = { environment: "prod", appType: ["web", "worker"] };
-    const agent = DiagnosticAgent.createProfile(config);
+    const agent = ArgusAgent.createProfile(config);
     assert.ok(agent);
   });
 
   it("should accept all three app types combined (web + db + worker)", () => {
     const config: AgentProfileConfig = { environment: "prod", appType: ["web", "db", "worker"] };
-    const agent = DiagnosticAgent.createProfile(config);
+    const agent = ArgusAgent.createProfile(config);
     assert.ok(agent);
   });
 
@@ -65,7 +65,7 @@ describe("DiagnosticAgent Profiles", () => {
       appType: ["web", "db", "worker"],
       workspaceDir: process.cwd(),
     };
-    const agent = DiagnosticAgent.createProfile(config);
+    const agent = ArgusAgent.createProfile(config);
     await agent.start();
     assert.strictEqual(agent.isRunning, true);
     agent.stop();
@@ -74,7 +74,7 @@ describe("DiagnosticAgent Profiles", () => {
 
   it("should still accept a single string appType (backward compat)", () => {
     const config: AgentProfileConfig = { environment: "prod", appType: "web" };
-    const agent = DiagnosticAgent.createProfile(config);
+    const agent = ArgusAgent.createProfile(config);
     assert.ok(agent);
   });
 
@@ -82,7 +82,7 @@ describe("DiagnosticAgent Profiles", () => {
 
   it('should accept appType "auto" and create a valid agent', () => {
     const config: AgentProfileConfig = { environment: "prod", appType: "auto" };
-    const agent = DiagnosticAgent.createProfile(config);
+    const agent = ArgusAgent.createProfile(config);
     assert.ok(agent);
   });
 
@@ -92,12 +92,12 @@ describe("DiagnosticAgent Profiles", () => {
       appType: "auto",
       workspaceDir: process.cwd(),
     };
-    const agent = DiagnosticAgent.createProfile(config);
+    const agent = ArgusAgent.createProfile(config);
     assert.ok(agent);
   });
 
   it("should expose a static detectAppTypes() method", () => {
-    const result = DiagnosticAgent.detectAppTypes();
+    const result = ArgusAgent.detectAppTypes();
     assert.ok(Array.isArray(result.types));
     assert.ok(result.matches);
   });

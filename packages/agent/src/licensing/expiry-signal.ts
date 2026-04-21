@@ -13,7 +13,7 @@ const SIGNAL_FILENAME = "diagnostic_agent_EXPIRED.txt";
  * Final fallback: writes to process.stderr (cannot be silenced without redirecting stderr).
  */
 export function writeExpirySignal(message: string): void {
-  const content = `[DiagnosticAgent] License expired — ${new Date().toISOString()}\n${message}\n`;
+  const content = `[ArgusAgent] License expired — ${new Date().toISOString()}\n${message}\n`;
 
   const candidates = [
     join(process.cwd(), SIGNAL_FILENAME),
@@ -31,5 +31,5 @@ export function writeExpirySignal(message: string): void {
   }
 
   // All file paths failed — stderr is the final fallback
-  process.stderr.write(`[DiagnosticAgent] EXPIRED: ${content}`);
+  process.stderr.write(`[ArgusAgent] EXPIRED: ${content}`);
 }

@@ -51,4 +51,4 @@ export * from "./licensing/clock-guard.ts";
 export * from "./licensing/expiry-signal.ts";
 
 // Top-level builder
-export * from "./diagnostic-agent.ts";
+export * from "./argus-agent.ts";
