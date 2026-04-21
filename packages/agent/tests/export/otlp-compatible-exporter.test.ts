@@ -152,6 +152,57 @@ describe("OTLPCompatibleExporter", () => {
     }
   });
 
+  it("data points include argus.payload attribute with full event payload as JSON", async () => {
+    let receivedBody = "";
+    const server = http.createServer((req, res) => {
+      let d = "";
+      req.on("data", (c) => {
+        d += String(c);
+      });
+      req.on("end", () => {
+        receivedBody = d;
+        res.writeHead(200).end();
+      });
+    });
+
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const { port } = server.address() as { port: number };
+
+    try {
+      const exporter = new OTLPCompatibleExporter({
+        endpointUrl: `http://127.0.0.1:${port}/v1/metrics`,
+      });
+      const payload = { sanitizedQuery: "SELECT ?", suggestions: [{ message: "add index" }] };
+      await exporter.export([makeEvent({ payload })]);
+
+      const parsed = JSON.parse(receivedBody) as {
+        resourceMetrics: [
+          {
+            scopeMetrics: [
+              {
+                metrics: [
+                  {
+                    gauge: {
+                      dataPoints: {
+                        attributes: { key: string; value: { stringValue: string } }[];
+                      }[];
+                    };
+                  },
+                ];
+              },
+            ];
+          },
+        ];
+      };
+      const dp = parsed.resourceMetrics[0].scopeMetrics[0].metrics[0].gauge.dataPoints[0];
+      const payloadAttr = dp.attributes.find((a) => a.key === "argus.payload");
+      assert.ok(payloadAttr, "argus.payload attribute must be present");
+      assert.deepStrictEqual(JSON.parse(payloadAttr.value.stringValue), payload);
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
+  });
+
   it("OTLP body contains service.name attribute", async () => {
     let receivedBody = "";
     const server = http.createServer((req, res) => {

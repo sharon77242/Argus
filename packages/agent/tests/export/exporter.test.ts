@@ -34,6 +34,42 @@ describe("OTLPExporter", () => {
     );
   });
 
+  it("uses traceId from payload when present instead of generating a random one", () => {
+    const exporter = new OTLPExporter({
+      endpointUrl: "https://localhost",
+      key: "test",
+      cert: "test",
+      ca: "test",
+    });
+
+    const knownTraceId = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4";
+    const events: AggregatorEvent[] = [
+      { id: "1", metricName: "query", value: 50, payload: { traceId: knownTraceId } },
+    ];
+
+    const payload = exporter.formatToOTLP(events);
+    const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+
+    assert.strictEqual(span.traceId, knownTraceId);
+  });
+
+  it("falls back to a random traceId when payload has no traceId", () => {
+    const exporter = new OTLPExporter({
+      endpointUrl: "https://localhost",
+      key: "test",
+      cert: "test",
+      ca: "test",
+    });
+
+    const events: AggregatorEvent[] = [{ id: "1", metricName: "query", value: 50, payload: {} }];
+
+    const payload = exporter.formatToOTLP(events);
+    const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+
+    assert.ok(span.traceId.length === 32, "fallback traceId must be 32 hex chars");
+    assert.ok(/^[0-9a-f]+$/.test(span.traceId), "fallback traceId must be hex");
+  });
+
   // Bug: retry delay used retryDelayMs * attempt (linear) but JSDoc promised "doubles each attempt".
   // With maxRetries=3 the 3rd retry diverges: linear gives 300ms, exponential gives 400ms.
   it("should use exponential backoff — delay doubles each retry attempt", async () => {

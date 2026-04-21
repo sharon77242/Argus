@@ -128,7 +128,8 @@ export class OTLPExporter {
       const durationMs = event.metricName === "memory-leak" ? 0 : event.value;
 
       return {
-        traceId: crypto.randomBytes(16).toString("hex"),
+        traceId:
+          (event.payload.traceId as string | undefined) ?? crypto.randomBytes(16).toString("hex"),
         spanId: crypto.randomBytes(8).toString("hex"),
         name: event.metricName,
         kind: 1, // SPAN_KIND_INTERNAL

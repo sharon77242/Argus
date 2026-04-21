@@ -50,7 +50,10 @@ export class OTLPCompatibleExporter {
     const nowNsStr = nowNs.toString();
 
     const dataPoints = events.map((e) => ({
-      attributes: [{ key: "metric.name", value: { stringValue: e.metricName } }],
+      attributes: [
+        { key: "metric.name", value: { stringValue: e.metricName } },
+        { key: "argus.payload", value: { stringValue: JSON.stringify(e.payload) } },
+      ],
       startTimeUnixNano: nowNsStr,
       timeUnixNano: nowNsStr,
       asDouble: e.value,
