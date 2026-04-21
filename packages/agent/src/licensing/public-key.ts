@@ -3,7 +3,7 @@
 // The 'kid' claim in the JWT header selects the correct key.
 export const BUNDLED_PUBLIC_KEYS: Record<string, string> = {
   // ── dev key (kid: 'dev-k1') ────────────────────────────────────────────────
-  // Local-development only. The matching private key is in tests/fixtures/dev-private-key.pem.
+  // Local-development only. Tests override this key dynamically via generateKeyPairSync.
   // Replace with production keys via scripts/embed-pubkey.ts before release.
   "dev-k1": [
     "-----BEGIN PUBLIC KEY-----",

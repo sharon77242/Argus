@@ -1,8 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { createSign, generateKeyPairSync, createPrivateKey } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { createSign, generateKeyPairSync } from "node:crypto";
 import { validateLicense } from "../../src/licensing/license-validator.ts";
 import { BUNDLED_PUBLIC_KEYS } from "../../src/licensing/public-key.ts";
 
@@ -146,15 +144,30 @@ describe("validateLicense", () => {
   });
 });
 
-// ── Integration: embedded dev-k1 key ─────────────────────────────────────────
-// Exercises the full validateLicense() path using the key actually embedded in
-// public-key.ts (kid: 'dev-k1') and its matching private key fixture.
+// ── Integration: dev-k1 key round-trip ───────────────────────────────────────
+// Verifies that validateLicense() correctly resolves the 'dev-k1' key from
+// BUNDLED_PUBLIC_KEYS.  We generate a fresh key pair so no fixture file is needed.
 describe("dev-k1 embedded key integration", () => {
-  const devPrivateKeyPem = readFileSync(
-    resolve(import.meta.dirname, "../fixtures/dev-private-key.pem"),
-    "utf8",
-  );
-  const devPrivateKey = createPrivateKey(devPrivateKeyPem);
+  const { privateKey: devPrivateKey, publicKey: devPublicKeyObj } = generateKeyPairSync("ec", {
+    namedCurve: "P-256",
+  });
+  let originalDevK1: string | undefined;
+
+  test.before(() => {
+    originalDevK1 = BUNDLED_PUBLIC_KEYS["dev-k1"];
+    BUNDLED_PUBLIC_KEYS["dev-k1"] = devPublicKeyObj.export({
+      type: "spki",
+      format: "pem",
+    }) as string;
+  });
+
+  test.after(() => {
+    if (originalDevK1 !== undefined) {
+      BUNDLED_PUBLIC_KEYS["dev-k1"] = originalDevK1;
+    } else {
+      delete BUNDLED_PUBLIC_KEYS["dev-k1"];
+    }
+  });
 
   function buildDevJwt(claims: Record<string, unknown>): string {
     const header = base64UrlEncode(

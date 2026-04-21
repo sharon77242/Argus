@@ -20,10 +20,9 @@
 import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { createSign, createPrivateKey } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { createSign, generateKeyPairSync } from "node:crypto";
 import { DiagnosticAgent } from "../src/diagnostic-agent.ts";
+import { BUNDLED_PUBLIC_KEYS } from "../src/licensing/public-key.ts";
 import http from "node:http";
 import { type AddressInfo } from "node:net";
 import fs from "node:fs";
@@ -33,9 +32,12 @@ import os from "node:os";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ── Dev-k1 license JWT builder ────────────────────────────────────────────────
-const _devPrivKey = createPrivateKey(
-  readFileSync(resolve(import.meta.dirname, "fixtures/dev-private-key.pem"), "utf8"),
-);
+// Generate a fresh EC P-256 key pair and override the embedded dev-k1 public key so tests
+// are fully self-contained and never depend on a fixture file.
+const { privateKey: _devPrivKey, publicKey: _devPubKeyObj } = generateKeyPairSync("ec", {
+  namedCurve: "P-256",
+});
+BUNDLED_PUBLIC_KEYS["dev-k1"] = _devPubKeyObj.export({ type: "spki", format: "pem" }) as string;
 function b64u(buf: Buffer) {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
