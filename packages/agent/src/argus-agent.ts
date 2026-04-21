@@ -474,9 +474,8 @@ export class ArgusAgent extends EventEmitter {
     if (this.globallyDisabled || this.running) return this;
 
     const debugEnv = process.env.ARGUS_DEBUG;
-    const debugEnabled = debugEnv !== undefined
-      ? debugEnv !== "false" && debugEnv !== "0"
-      : this.isDevMode;
+    const debugEnabled =
+      debugEnv !== undefined ? debugEnv !== "false" && debugEnv !== "0" : this.isDevMode;
     if (debugEnabled) {
       this.useConsoleLogger();
     }
