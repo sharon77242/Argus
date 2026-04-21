@@ -49,7 +49,7 @@ export class OTLPExporter {
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       if (attempt > 0) {
-        await new Promise((r) => setTimeout(r, retryDelayMs * attempt));
+        await new Promise((r) => setTimeout(r, retryDelayMs * 2 ** (attempt - 1)));
       }
       try {
         await this.attempt(events);

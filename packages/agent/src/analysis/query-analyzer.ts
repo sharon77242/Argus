@@ -204,8 +204,13 @@ export class QueryAnalyzer {
   private detectNPlusOne(query: string, suggestions: FixSuggestion[]): void {
     const now = Date.now();
 
-    // Normalize the query to detect repeated structural patterns
-    const normalized = query.replace(/\?\s*/g, "?").trim();
+    // Normalize all placeholder styles to '?' so structurally identical queries
+    // from different drivers (pg $N, named :param, mysql ?) collapse to the same key.
+    const normalized = query
+      .replace(/\$\d+/g, "?")
+      .replace(/:[a-zA-Z_]\w*/g, "?")
+      .replace(/\?\s*/g, "?")
+      .trim();
 
     const entry = this.recentQueries.get(normalized);
 

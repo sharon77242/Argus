@@ -40,4 +40,15 @@ describe("LogAnalyzer", () => {
     assert.strictEqual(s1.length, 0);
     assert.strictEqual(s2.length, 0);
   });
+
+  // Bug: threshold check used === so warning fired only on exactly the 5th error and never again
+  it("should keep warning on every error beyond the threshold (>= not ===)", () => {
+    const fresh = new LogAnalyzer();
+    // Reach threshold
+    for (let i = 0; i < 5; i++) fresh.analyze(["err"], "error");
+    // 6th error must also trigger the storm warning
+    const suggestions = fresh.analyze(["err"], "error");
+    const rule = suggestions.find((s) => s.rule === "log-error-storm");
+    assert.ok(rule, "log-error-storm should still fire on the 6th error in the window");
+  });
 });

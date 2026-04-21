@@ -46,7 +46,7 @@ export class LogAnalyzer {
       const now = Date.now();
       if (now - this.recentErrors.firstSeen <= this.ERROR_WINDOW_MS) {
         this.recentErrors.count++;
-        if (this.recentErrors.count === this.ERROR_THRESHOLD) {
+        if (this.recentErrors.count >= this.ERROR_THRESHOLD) {
           suggestions.push({
             severity: "critical",
             rule: "log-error-storm",

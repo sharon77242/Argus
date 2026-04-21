@@ -94,7 +94,7 @@ export class HttpInstrumentation extends EventEmitter {
         once: (event: string, cb: () => void) => void;
         statusCode?: number;
       };
-      r.once("close", () => {
+      r.once("end", () => {
         onEnd(r.statusCode);
       });
     });
