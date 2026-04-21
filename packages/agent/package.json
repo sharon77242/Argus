@@ -1,5 +1,5 @@
 {
-  "name": "argus",
+  "name": "argus-apm",
   "version": "0.1.0",
   "description": "Privacy-first performance diagnostics for Node.js — Argus",
   "main": "dist/cjs/index.cjs",

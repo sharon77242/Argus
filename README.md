@@ -87,10 +87,10 @@ This package ships a **dual build**: ESM and CommonJS. Node.js picks the right f
 
 ```js
 // ✅ ESM project (type:module or .mjs)
-import { ArgusAgent } from 'argus';
+import { ArgusAgent } from 'argus-apm';
 
 // ✅ CommonJS project — require() works directly
-const { ArgusAgent } = require('argus');
+const { ArgusAgent } = require('argus-apm');
 
 // ✅ CommonJS project — dynamic import also works
 const { ArgusAgent } = await import('argus');
@@ -103,13 +103,13 @@ const { ArgusAgent } = await import('argus');
 ### Using the compiled package in your project (Node ≥ 14.18)
 
 ```bash
-npm install argus
+npm install argus-apm
 ```
 
 Then import from the compiled entry point:
 
 ```typescript
-import { ArgusAgent } from 'argus';
+import { ArgusAgent } from 'argus-apm';
 ```
 
 ### Building from source (Node ≥ 22.6, contributors only)
@@ -152,7 +152,7 @@ dist/
 
 ```typescript
 // Compiled npm package
-import { ArgusAgent } from 'argus';
+import { ArgusAgent } from 'argus-apm';
 
 // Or if running source directly (Node 22.6+)
 // import { ArgusAgent } from './packages/agent/src/index.ts';
@@ -274,7 +274,7 @@ const result = ArgusAgent.detectAppTypes('./my-service');
 For maximum control, compose the agent manually using the fluent builder:
 
 ```typescript
-import { ArgusAgent } from 'argus';
+import { ArgusAgent } from 'argus-apm';
 import fs from 'node:fs';
 
 const agent = await ArgusAgent.create()
@@ -446,7 +446,7 @@ Connect-compatible middleware that reads the incoming `traceparent` W3C header a
 ### Manual context (background jobs / queue workers)
 
 ```typescript
-import { runWithContext } from 'argus';
+import { runWithContext } from 'argus-apm';
 
 const ctx = agent.createContext('JOB', '/process-order');
 runWithContext(ctx, async () => {
@@ -736,16 +736,16 @@ Every subsystem is individually exported — TypeScript autocomplete surfaces th
 
 ```typescript
 // Scrub a string manually
-import { EntropyChecker } from 'argus';
+import { EntropyChecker } from 'argus-apm';
 const sanitized = new EntropyChecker().scrub('Bearer eyJhbGc...');
 // → 'Bearer [REDACTED]'
 
 // Detect connection-pool circuit-break conditions without the full agent
-import { CircuitBreakerDetector } from 'argus';
+import { CircuitBreakerDetector } from 'argus-apm';
 const suggestions = new CircuitBreakerDetector().analyze(recentQueryEvents);
 
 // Ship metrics to Honeycomb / New Relic / Datadog without mTLS
-import { OTLPCompatibleExporter } from 'argus';
+import { OTLPCompatibleExporter } from 'argus-apm';
 const exporter = new OTLPCompatibleExporter({
   endpointUrl: 'https://api.honeycomb.io/v1/metrics',
   apiKey: process.env.HONEYCOMB_API_KEY,
@@ -754,7 +754,7 @@ const exporter = new OTLPCompatibleExporter({
 await exporter.export(aggregatorEvents);
 
 // Manual async-context propagation (background jobs, queue workers)
-import { runWithContext } from 'argus';
+import { runWithContext } from 'argus-apm';
 runWithContext(agent.createContext('WORKER', '/process-job'), async () => {
   // all traced queries here carry the same traceId
   await processJob();
