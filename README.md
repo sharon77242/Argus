@@ -164,6 +164,9 @@ const agent = await DiagnosticAgent.createProfile({
 // SIGTERM / SIGINT → flush telemetry → process.exit is wired automatically
 ```
 
+> [!NOTE]
+> **Zero-overhead kill-switch** — set `DIAGNOSTIC_AGENT_ENABLED=false` (or `0`) in any environment and the agent skips all initialisation with no CPU cost. Useful for gradual rollouts, incident response, or staging overrides without a code deploy.
+
 ---
 
 ## Demo App
