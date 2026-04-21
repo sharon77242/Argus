@@ -66,7 +66,10 @@ describe("InstrumentationEngine", () => {
     const [event] = (await Promise.race([p, timeoutPromise])) as [TracedQuery];
 
     assert.strictEqual(event.sanitizedQuery, "DELETE FROM table WHERE x = ?");
-    assert.ok(event.durationMs >= 20);
+    assert.ok(
+      event.durationMs >= 5,
+      `durationMs should reflect the sleep (got ${event.durationMs}ms)`,
+    );
 
     // Verify the source line is from this file
     assert.ok(

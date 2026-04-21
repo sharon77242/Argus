@@ -7,3 +7,4 @@ coverage/
 .claude/
 plans/
 *.pem
+!packages/agent/tests/fixtures/dev-private-key.pem

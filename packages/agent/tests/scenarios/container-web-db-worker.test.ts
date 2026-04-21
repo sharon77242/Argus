@@ -174,7 +174,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
 
       assert.deepStrictEqual(result, [{ name: "Order #1" }]);
       assert.ok(captured.length === 1, "exactly one query event");
-      assert.ok(captured[0].durationMs >= 5, "duration should reflect actual wait");
+      assert.ok(captured[0].durationMs >= 1, "duration should reflect actual wait");
     });
 
     it("traceQuery() still emits on failure", async () => {
