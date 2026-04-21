@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Debug routes — intentionally trigger every DiagnosticAgent monitoring feature.
+ * Debug routes — intentionally trigger every ArgusAgent monitoring feature.
  * Never use patterns like these in production code.
  */
 

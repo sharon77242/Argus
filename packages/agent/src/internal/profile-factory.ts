@@ -20,6 +20,7 @@ import { detectAppTypes } from "../profiling/app-type-detector.ts";
  */
 export function buildAgentProfile(agent: ArgusAgent, config: AgentProfileConfig): void {
   const env = config.environment ?? "prod";
+  agent.isDevMode = env === "dev";
 
   // Resolve app types — 'auto' triggers package.json scanning
   let appTypes: AppType[];

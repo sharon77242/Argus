@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const { DiagnosticAgent } = require(path.resolve(__dirname, '../packages/agent/dist/cjs/index.cjs'));
+const { ArgusAgent } = require(path.resolve(__dirname, '../packages/agent/dist/cjs/index.cjs'));
 
 // ── colour helpers (no deps) ──────────────────────────────────────────────────
 const c = {
@@ -12,7 +12,7 @@ const c = {
 const stamp = () => new Date().toISOString().slice(11, 23); // HH:MM:SS.mmm
 const tag = (colour, label) => `${colour}${c.bold}[${label}]${c.reset}`;
 
-const agent = DiagnosticAgent.createProfile({
+const agent = ArgusAgent.createProfile({
   environment: process.env.NODE_ENV === 'production' ? 'prod' : 'dev',
   appType: ['web', 'db'],
   workspaceDir: path.resolve(__dirname, '..'),

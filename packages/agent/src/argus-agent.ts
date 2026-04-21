@@ -152,6 +152,8 @@ export class ArgusAgent extends EventEmitter {
   private running = false;
   // Listeners added by useConsoleLogger — kept so they can be removed on stop().
   private debugListeners: DebugListener[] = [];
+  /** Set by buildAgentProfile when environment === 'dev'. */
+  isDevMode = false;
 
   // Private constructor — use ArgusAgent.create()
   private constructor() {
@@ -471,7 +473,11 @@ export class ArgusAgent extends EventEmitter {
   public async start(): Promise<this> {
     if (this.globallyDisabled || this.running) return this;
 
-    if (process.env.ARGUS_DEBUG === "true") {
+    const debugEnv = process.env.ARGUS_DEBUG;
+    const debugEnabled = debugEnv !== undefined
+      ? debugEnv !== "false" && debugEnv !== "0"
+      : this.isDevMode;
+    if (debugEnabled) {
       this.useConsoleLogger();
     }
 
@@ -840,7 +846,7 @@ export class ArgusAgent extends EventEmitter {
    * @param level   `'warn'` — anomalies/crashes/errors only (default)
    *                `'verbose'` — also logs every query and HTTP request
    */
-  private useConsoleLogger(prefix = "[DiagAgent]", level: "warn" | "verbose" = "verbose"): this {
+  private useConsoleLogger(prefix = "[Argus]", level: "warn" | "verbose" = "verbose"): this {
     const registered = installConsoleLogger(this, prefix, level);
     this.debugListeners.push(...registered);
     return this;

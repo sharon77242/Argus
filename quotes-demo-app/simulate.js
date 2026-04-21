@@ -8,7 +8,7 @@
 
 const http = require('http');
 
-// ── 1. Boot DiagnosticAgent (must be first) ───────────────────────────────────
+// ── 1. Boot ArgusAgent (must be first) ───────────────────────────────────────
 const agent = require('./diagnostic');
 
 // ── 2. Boot Express app ───────────────────────────────────────────────────────

@@ -93,7 +93,7 @@ import { ArgusAgent } from 'argus-apm';
 const { ArgusAgent } = require('argus-apm');
 
 // ✅ CommonJS project — dynamic import also works
-const { ArgusAgent } = await import('argus');
+const { ArgusAgent } = await import('argus-apm');
 ```
 
 ---
@@ -160,7 +160,7 @@ import { ArgusAgent } from 'argus-apm';
 // import { ArgusAgent } from './packages/agent/src/index.ts';
 
 const agent = await ArgusAgent.createProfile({
-  environment: 'prod',   // or 'dev' | 'test'
+  environment: 'dev',    // 'dev' prints all events to console automatically; silence with 'prod' or ARGUS_DEBUG=false
   appType: ['web', 'db'],
 }).start();
 // SIGTERM / SIGINT → flush telemetry → process.exit is wired automatically
@@ -763,7 +763,7 @@ runWithContext(agent.createContext('WORKER', '/process-job'), async () => {
 });
 ```
 
-> **Source mode (contributors):** replace `'argus'` with `'./packages/agent/src/index.ts'` and run with `node --experimental-strip-types` on Node 22.6+.
+> **Source mode (contributors):** replace `'argus-apm'` with `'./packages/agent/src/index.ts'` and run with `node --experimental-strip-types` on Node 22.6+.
 
 ---
 

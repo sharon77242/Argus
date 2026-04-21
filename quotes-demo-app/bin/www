@@ -4,7 +4,7 @@
  * Module dependencies.
  */
 
-// ⚡ DiagnosticAgent — must be first, before Express loads
+// ⚡ ArgusAgent — must be first, before Express loads
 require('../diagnostic');
 
 var app = require('../app');

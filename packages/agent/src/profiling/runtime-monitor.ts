@@ -212,7 +212,6 @@ export class RuntimeMonitor extends EventEmitter {
     const now = Date.now();
 
     if (now - this.lastCpuProfileTime < this.options.cpuProfileCooldownMs!) {
-      // Fallback to simple emission if in cooldown
       this.emit("anomaly", {
         type: "event-loop-lag",
         lagMs,
@@ -225,6 +224,7 @@ export class RuntimeMonitor extends EventEmitter {
     this.isProfiling = true;
     this.lastCpuProfileTime = now;
 
+    let profileDataPath: string | undefined;
     try {
       if (!this.inspectorSession) {
         this.inspectorSession = new Session();
@@ -232,21 +232,23 @@ export class RuntimeMonitor extends EventEmitter {
       }
 
       const profileData = await this.captureCpuProfile();
-      if (!profileData) return; // Session detached or failed
-      const tempPath = join(tmpdir(), `cpu-profile-${Date.now()}.cpuprofile`);
-      await writeFile(tempPath, JSON.stringify(profileData), "utf-8");
-
-      this.emit("anomaly", {
-        type: "event-loop-lag",
-        lagMs,
-        profileDataPath: tempPath,
-        timestamp: Date.now(),
-      } satisfies ProfilerEvent);
+      if (profileData) {
+        const tempPath = join(tmpdir(), `cpu-profile-${Date.now()}.cpuprofile`);
+        await writeFile(tempPath, JSON.stringify(profileData), "utf-8");
+        profileDataPath = tempPath;
+      }
     } catch (err) {
       this.emit("error", err);
     } finally {
       this.isProfiling = false;
     }
+
+    this.emit("anomaly", {
+      type: "event-loop-lag",
+      lagMs,
+      profileDataPath,
+      timestamp: Date.now(),
+    } satisfies ProfilerEvent);
   }
 
   /** Test helper — directly fire the heap-oom-risk logic without waiting for a real threshold. */
