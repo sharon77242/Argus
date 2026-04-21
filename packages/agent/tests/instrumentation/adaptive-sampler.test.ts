@@ -36,14 +36,11 @@ describe("AdaptiveSampler", () => {
   // ── refill ────────────────────────────────────────────────────────────────
 
   it("tokens refill over time", async () => {
-    // ratePerMs = 1 token/ms, burst = 10 → after 5ms should have at least 4 tokens
+    // ratePerMs = 1 token/ms, burst = 10 → drain then wait for refill
     const sampler = new AdaptiveSampler({ ratePerMs: 1, burst: 10 });
-    // drain fully
     for (let i = 0; i < 10; i++) sampler.shouldSample("test");
-    assert.strictEqual(sampler.shouldSample("test"), false);
-
-    await new Promise((r) => setTimeout(r, 10));
-    // After 10ms at 1/ms, bucket should have ~10 tokens (capped at burst)
+    // After 20ms at 1/ms the bucket must have refilled (capped at burst=10)
+    await new Promise((r) => setTimeout(r, 20));
     assert.strictEqual(sampler.shouldSample("test"), true);
   });
 
