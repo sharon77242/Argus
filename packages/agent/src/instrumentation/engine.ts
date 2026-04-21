@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { performance } from "node:perf_hooks";
-import { safeChannel, dcSubscribe, dcUnsubscribe } from "./safe-channel.ts";
+import { dcSubscribe, dcUnsubscribe } from "./safe-channel.ts";
 import { AstSanitizer } from "../sanitization/ast-sanitizer.ts";
 import { getCurrentContext } from "./correlation.ts";
 

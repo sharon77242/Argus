@@ -8,10 +8,7 @@ import type { ScanResult } from "../../src/analysis/types.ts";
 // tsconfig.json. Using process.cwd() (the full agent project) is fragile
 // because the agent's tsconfig includes tests/, so any TS issue introduced
 // in ANY test file would cause this assertion to fail non-deterministically.
-const CLEAN_FIXTURE_DIR = join(
-  import.meta.dirname,
-  "../fixtures/static-scanner-clean",
-);
+const CLEAN_FIXTURE_DIR = join(import.meta.dirname, "../fixtures/static-scanner-clean");
 
 describe("StaticScanner", () => {
   it("should run TypeScript scan and return a ScanResult", async () => {

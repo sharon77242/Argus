@@ -5,10 +5,7 @@ import {
   type RuntimeMonitorOptions,
   type ProfilerEvent,
 } from "./profiling/runtime-monitor.ts";
-import {
-  InstrumentationEngine,
-  type InstrumentationOptions,
-} from "./instrumentation/engine.ts";
+import { InstrumentationEngine, type InstrumentationOptions } from "./instrumentation/engine.ts";
 import { MetricsAggregator, type AggregatorEvent } from "./export/aggregator.ts";
 import { OTLPExporter, type ExporterConfig } from "./export/exporter.ts";
 import { EntropyChecker } from "./sanitization/entropy-checker.ts";
@@ -60,10 +57,7 @@ import { writeExpirySignal } from "./licensing/expiry-signal.ts";
 import { GracefulShutdown, type GracefulShutdownOptions } from "./profiling/graceful-shutdown.ts";
 import { buildAgentProfile } from "./internal/profile-factory.ts";
 import { createQueryHandler } from "./internal/query-handler.ts";
-import {
-  installConsoleLogger,
-  type DebugListener,
-} from "./internal/console-logger.ts";
+import { installConsoleLogger, type DebugListener } from "./internal/console-logger.ts";
 
 // WeakMap-based private storage for license claims — avoids exposing internal field on agent
 const licenseClaims = new WeakMap<DiagnosticAgent, LicenseClaims>();

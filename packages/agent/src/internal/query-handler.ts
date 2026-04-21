@@ -39,10 +39,9 @@ export function createQueryHandler(deps: QueryHandlerDeps): (traced: TracedQuery
     if (adaptiveSampler && !adaptiveSampler.shouldSample("query")) return;
 
     // 2. Query analysis — enrich with fix suggestions
-    const enriched =
-      queryAnalyzer
-        ? { ...traced, suggestions: queryAnalyzer.analyze(traced.sanitizedQuery) }
-        : traced;
+    const enriched = queryAnalyzer
+      ? { ...traced, suggestions: queryAnalyzer.analyze(traced.sanitizedQuery) }
+      : traced;
 
     // 3. Slow query monitor — driver may be absent for manual traceQuery() calls
     if (slowQueryMonitor) {
@@ -56,7 +55,11 @@ export function createQueryHandler(deps: QueryHandlerDeps): (traced: TracedQuery
         traced.traceId,
       );
       if (slow) {
-        aggregator.record("slow-query", slow.durationMs, slow as unknown as Record<string, unknown>);
+        aggregator.record(
+          "slow-query",
+          slow.durationMs,
+          slow as unknown as Record<string, unknown>,
+        );
         emit("slow-query", slow);
       }
     }

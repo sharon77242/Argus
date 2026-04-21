@@ -92,7 +92,9 @@ export function installConsoleLogger(
       };
       const hints = ev.suggestions?.map((s) => s.message).join(" | ");
       const suffix = hints ? `\n  ⚠ ${hints}` : "";
-      console.log(`${prefix} QUERY   [${ev.durationMs.toFixed(1)}ms] ${ev.sanitizedQuery}${suffix}`);
+      console.log(
+        `${prefix} QUERY   [${ev.durationMs.toFixed(1)}ms] ${ev.sanitizedQuery}${suffix}`,
+      );
     });
     add("http", (r) => {
       const ev = r as { method: string; url: string; statusCode?: number; durationMs: number };
