@@ -150,55 +150,63 @@ describe("SlowQueryMonitor", () => {
 
   describe("missing-driver warning", () => {
     let originalNodeEnv: string | undefined;
-    let originalEmitWarning: typeof process.emitWarning;
+    // Counts only warnings for the driver name set in each test — prevents
+    // cross-contamination from other suite tests that also use custom drivers.
+    let trackedDriver = "";
     let warningCodes: string[] = [];
+
+    function onWarning(warning: Error & { code?: string; message?: string }): void {
+      if (
+        warning.code === "ARGUS_MISSING_DRIVER_THRESHOLD" &&
+        trackedDriver &&
+        warning.message.includes(`"${trackedDriver}"`)
+      ) {
+        warningCodes.push(warning.code);
+      }
+    }
 
     beforeEach(() => {
       originalNodeEnv = process.env.NODE_ENV;
-      originalEmitWarning = process.emitWarning;
       warningCodes = [];
-      // Intercept synchronously — process.emitWarning fires via nextTick so
-      // the process 'warning' event is not observable within the same tick.
-      process.emitWarning = (warning, options?) => {
-        const code =
-          typeof options === "object" && options !== null
-            ? (options as { code?: string }).code
-            : undefined;
-        if (code === "ARGUS_MISSING_DRIVER_THRESHOLD") warningCodes.push(code);
-        originalEmitWarning.call(
-          process,
-          warning,
-          options as Parameters<typeof process.emitWarning>[1],
-        );
-      };
+      trackedDriver = "";
+      // process.on('warning') is additive and parallel-safe — unlike
+      // monkey-patching process.emitWarning which mutates a global.
+      process.on("warning", onWarning);
     });
 
     afterEach(() => {
-      process.emitWarning = originalEmitWarning;
+      process.off("warning", onWarning);
       if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
       else process.env.NODE_ENV = originalNodeEnv;
     });
 
-    it("emits process warning once for an unregistered driver in non-production", () => {
+    it("emits process warning once for an unregistered driver in non-production", async () => {
       process.env.NODE_ENV = "development";
+      trackedDriver = "argus-test-unique-driver-abc";
       const m = new SlowQueryMonitor({ defaultThresholdMs: 1000 });
-      m.getThreshold("brand-new-driver");
-      m.getThreshold("brand-new-driver"); // second call must not re-warn
+      m.getThreshold(trackedDriver);
+      m.getThreshold(trackedDriver); // second call must not re-warn
+      // Warning events are emitted asynchronously via nextTick — yield one tick.
+      await new Promise<void>((r) => process.nextTick(r));
       assert.strictEqual(warningCodes.length, 1, "should warn exactly once per unknown driver");
     });
 
-    it("does not emit warning when NODE_ENV is production", () => {
+    it("does not emit warning when NODE_ENV is production", async () => {
       process.env.NODE_ENV = "production";
+      trackedDriver = "argus-test-unique-driver-abc";
       const m = new SlowQueryMonitor({ defaultThresholdMs: 1000 });
-      m.getThreshold("brand-new-driver");
+      m.getThreshold(trackedDriver);
+      await new Promise<void>((r) => process.nextTick(r));
       assert.strictEqual(warningCodes.length, 0, "should not warn in production");
     });
 
-    it("does not emit warning for drivers in DRIVER_DEFAULTS", () => {
+    it("does not emit warning for drivers in DRIVER_DEFAULTS", async () => {
       process.env.NODE_ENV = "development";
+      trackedDriver = "pg"; // Known driver — should never trigger the warning
       const m = new SlowQueryMonitor({ defaultThresholdMs: 1000 });
       m.getThreshold("pg");
       m.getThreshold("redis");
+      await new Promise<void>((r) => process.nextTick(r));
       assert.strictEqual(warningCodes.length, 0, "known drivers must not trigger warning");
     });
   });

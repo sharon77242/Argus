@@ -15,23 +15,31 @@ A lightweight agent that embeds directly into your application — silently trac
 1. [Why This Exists](#why-this-exists)
 2. [Requirements](#requirements)
 3. [Installation](#installation)
-4. [Demo App](#demo-app)
-5. [Quick Start](#quick-start)
+4. [Quick Start](#quick-start)
+5. [Demo App](#demo-app)
 6. [Profile API (recommended)](#profile-api-recommended)
    - [Environment Presets](#environment-presets)
    - [App Type Presets](#app-type-presets)
    - [Auto-Detection](#auto-detection)
 7. [Builder API (fine-grained)](#builder-api-fine-grained)
-8. [Events Reference](#events-reference)
-9. [Environment Variables](#environment-variables)
-10. [Production Safety Reference](#production-safety-reference)
-11. [Privacy Guarantees](#privacy-guarantees)
-12. [Architecture Layers](#architecture-layers)
-13. [Project Structure](#project-structure)
-14. [Low-Level API](#low-level-api)
-15. [Self-Host Your OTLP Endpoint](#self-host-your-otlp-endpoint)
-16. [SaaS Dashboard — Coming Soon](#saas-dashboard--coming-soon)
-17. [License](#license)
+   - [Slow Query Monitor](#slow-query-monitor)
+   - [Transaction Monitor](#transaction-monitor)
+   - [Cache Monitor](#cache-monitor)
+   - [GC Monitor](#gc-monitor)
+   - [Pool Monitor](#pool-monitor)
+   - [DNS Monitor](#dns-monitor)
+   - [Adaptive Sampler](#adaptive-sampler)
+8. [Instance Methods](#instance-methods)
+9. [Events Reference](#events-reference)
+10. [Environment Variables](#environment-variables)
+11. [Production Safety Reference](#production-safety-reference)
+12. [Privacy Guarantees](#privacy-guarantees)
+13. [Architecture Layers](#architecture-layers)
+14. [Project Structure](#project-structure)
+15. [Low-Level API](#low-level-api)
+16. [Self-Host Your OTLP Endpoint](#self-host-your-otlp-endpoint)
+17. [SaaS Dashboard — Coming Soon](#saas-dashboard--coming-soon)
+18. [License](#license)
 
 ---
 
@@ -107,7 +115,7 @@ import { DiagnosticAgent } from 'argus';
 ### Building from source (Node ≥ 22.6, contributors only)
 
 ```bash
-git clone <repo>
+git clone https://github.com/sharon77242/Argus.git
 npm install
 
 # Run all 373 tests (uses --experimental-strip-types, requires Node 22.6+)
@@ -140,149 +148,6 @@ dist/
 
 ---
 
-## Demo App
-
-`quotes-demo-app/` is a small Express + PostgreSQL API that runs the agent in dev mode and streams every monitoring event to the terminal in colour. Use it to see the agent in action before wiring it into your own project.
-
-> **Pick one workflow — do not run both at the same time.**
-> - **Local dev** (`docker-compose-pg-only.yml`) — Postgres in Docker, Node.js running natively on your machine. Best for iterating on the agent source.
-> - **Full Docker** (`docker-compose.demo.yml`, repo root) — everything containerised; no local Node.js or pnpm required. Best for a clean one-command demo.
-
-### Prerequisites
-
-| Requirement | Version |
-|---|---|
-| Node.js | ≥ 14.18.0 (compiled) / ≥ 22.6.0 (source/dev) |
-| Docker | any recent version |
-| pnpm | ≥ 8 (or npm) |
-
-### Setup (one-time)
-
-```bash
-# 1. Build the agent package
-cd packages/agent
-pnpm build          # or: npm run build
-cd ../..
-
-# 2. Start Postgres and seed the database (17 programming quotes)
-cd quotes-demo-app
-docker compose -f docker-compose-pg-only.yml up -d
-cd ..
-
-# 3. Install demo dependencies
-cd quotes-demo-app
-npm install
-```
-
-### Run the simulation
-
-```bash
-# From quotes-demo-app/
-node simulate.js
-```
-
-This starts the server, runs a scripted traffic sequence, then exits. You should see output like:
-
-```
-╔══════════════════════════════════════════╗
-║  Argus — ACTIVE                          ║
-╚══════════════════════════════════════════╝
-
-20:36:19.791 [QUERY] [pg] SELECT id, quote, author FROM quote OFFSET $? LIMIT $? (50.3ms)
-               ↳ hints: offset-pagination
-20:36:19.794 [QUERY] [pg] SELECT id, quote, author FROM quote OFFSET $? LIMIT $? (126.9ms) ⚠ SLOW
-               ↳ hints: offset-pagination
-20:36:20.007 [QUERY] [pg] SELECT id, quote, author FROM quote OFFSET $? LIMIT $? (44.8ms)
-               ↳ hints: offset-pagination, n-plus-one
-20:36:20.501 [QUERY] [pg] INSERT INTO quote(quote, author) VALUES ($?, $?) RETURNING * (67.3ms)
-20:36:20.503 [HTTP ] POST http://localhost/quotes → 500 (93.8ms)
-DB connect string: [REDACTED_SECRET]
-20:36:20.504 [SCRUB] console.log contained a high-entropy secret — redacted
-20:36:20.601 [QUERY] [pg] SELECT * FROM quote (31.2ms)
-               ↳ hints: no-select-star, missing-limit, full-table-scan
-20:36:20.710 [QUERY] [pg] UPDATE quote SET updated_at = ? (8.4ms)
-               ↳ hints: missing-where-update
-20:36:20.820 [FS   ] readFileSync package.json (0.3ms)
-               ↳ hints: [critical] synchronous-fs
-20:36:20.923 [FS   ] readFileSync package.json (0.2ms)
-               ↳ hints: [critical] synchronous-fs, [warning] missing-fs-cache
-20:36:21.010 [LOG  ] console.log → [info] unstructured-log
-20:36:21.050 [LOG  ] console.log → [warning] large-log-payload
-20:36:21.110 [LOG  ] console.error → [critical] log-error-storm
-20:36:21.671 [HTTP ] GET http://httpbin.org/get → 200 (437.6ms)
-               ↳ hints: insecure-http
-20:36:21.902 [SCAN ] static analysis complete — 0 issue(s) across 1 tool(s)
-```
-
-**What each tag demonstrates:**
-
-| Tag | Rule fired | Trigger |
-|---|---|---|
-| `[QUERY]` | — | Every `pg` call intercepted via `diagnostics_channel`; values sanitised to `?` |
-| `↳ offset-pagination` | `QueryAnalyzer` | `OFFSET` pagination degrades at scale |
-| `↳ n-plus-one` | `QueryAnalyzer` | Same query ≥ 5× within 1 s |
-| `↳ no-select-star` | `QueryAnalyzer` | `SELECT *` fetches all columns |
-| `↳ full-table-scan` | `QueryAnalyzer` | `SELECT` without `WHERE` or `LIMIT` |
-| `↳ missing-where-update` | `QueryAnalyzer` ⚠ critical | `UPDATE` without `WHERE` touches every row |
-| `[FS   ]` | `FsAnalyzer` | `fs.readFileSync` / `readFile` calls intercepted |
-| `↳ synchronous-fs` | `FsAnalyzer` ⚠ critical | Sync fs call blocks the event loop |
-| `↳ missing-fs-cache` | `FsAnalyzer` | Same file read 5+ times within 1 s |
-| `[LOG  ]` | `LogAnalyzer` | `console.log/warn/error` intercepted |
-| `↳ unstructured-log` | `LogAnalyzer` | Mixing raw strings and objects in one log call |
-| `↳ large-log-payload` | `LogAnalyzer` | Log payload > 5 KB can block the event loop |
-| `↳ log-error-storm` | `LogAnalyzer` ⚠ critical | 5+ `console.error` calls within 1 s |
-| `[HTTP ]` | `HttpAnalyzer` | Outbound HTTP/HTTPS captured via `diagnostics_channel` |
-| `↳ insecure-http` | `HttpAnalyzer` ⚠ critical | Plain `http://` request to a remote host |
-| `[SCRUB]` | `EntropyChecker` | High-entropy token in a log call — replaced with `[REDACTED_SECRET]` |
-| `[ANOM ]` | `RuntimeMonitor` | Event-loop lag > threshold (busy-spin demo) |
-| `[SCAN ]` | `StaticScanner` | TypeScript Compiler API on startup |
-
-### Run as a long-running server
-
-```bash
-# From quotes-demo-app/
-node ./bin/www
-```
-
-Then hit the API manually:
-
-```bash
-# List quotes (page 1)
-curl http://localhost:3000/quotes
-
-# List page 2
-curl http://localhost:3000/quotes?page=2
-
-# Add a quote
-curl -X POST http://localhost:3000/quotes \
-  -H 'Content-Type: application/json' \
-  -d '{"quote":"Make it work, make it right, make it fast.","author":"Kent Beck"}'
-```
-
-### Fully containerised (optional)
-
-Run both the API and Postgres inside Docker — no local Node.js or pnpm required:
-
-```bash
-# From the repo root
-docker compose -f docker-compose.demo.yml up --build
-```
-
-Logs from the agent stream to stdout. Press `Ctrl-C` to stop, then:
-
-```bash
-docker compose -f docker-compose.demo.yml down -v
-```
-
-### Teardown (local dev)
-
-```bash
-cd quotes-demo-app
-docker compose -f docker-compose-pg-only.yml down
-```
-
----
-
 ## Quick Start
 
 ```typescript
@@ -290,16 +155,35 @@ docker compose -f docker-compose-pg-only.yml down
 import { DiagnosticAgent } from 'argus';
 
 // Or if running source directly (Node 22.6+)
-// import { DiagnosticAgent } from './src/index.ts';
+// import { DiagnosticAgent } from './packages/agent/src/index.ts';
 
 const agent = await DiagnosticAgent.createProfile({
   environment: 'prod',   // or 'dev' | 'test'
   appType: ['web', 'db'],
 }).start();
-
-// Graceful shutdown (flushes remaining telemetry)
-process.on('SIGTERM', () => agent.stop());
+// SIGTERM / SIGINT → flush telemetry → process.exit is wired automatically
 ```
+
+---
+
+## Demo App
+
+`quotes-demo-app/` is a small Express + PostgreSQL API that runs the agent in dev mode and streams every monitoring event to the terminal in colour. Use it to see the agent in action before wiring it into your own project.
+
+```bash
+# Quickest path — fully containerised, no local Node.js required
+docker compose -f docker-compose.demo.yml up --build
+```
+
+Or run Node.js natively against a Dockerised Postgres:
+
+```bash
+cd packages/agent && pnpm build && cd ../..
+cd quotes-demo-app && docker compose -f docker-compose-pg-only.yml up -d && npm install
+node simulate.js   # scripted traffic sequence — watch the agent fire in real time
+```
+
+See [`quotes-demo-app/README.md`](quotes-demo-app/README.md) for the full setup guide, annotated terminal output, and curl examples.
 
 ---
 
@@ -312,7 +196,7 @@ const agent = await DiagnosticAgent.createProfile({
   environment: 'prod',        // 'dev' | 'test' | 'prod'
   appType: ['web', 'db'],     // single string or array — modules are unioned
   enabled: true,              // overridden by DIAGNOSTIC_AGENT_ENABLED env-var
-  workspaceDir: process.cwd(),
+  workspaceDir: process.cwd(), // dev/test only — enables StaticScanner, AuditScanner, SourceMaps
 }).start();
 ```
 
@@ -320,17 +204,17 @@ const agent = await DiagnosticAgent.createProfile({
 
 | `environment` | Modules Enabled | Optimization Target |
 |---|---|---|
-| `prod` | CrashGuard, LogTracing | **Stability** — minimal overhead, high safety |
-| `dev` | `prod` + FsTracing, StaticScanner, AuditScanner, SourceMaps | **Forensics** — deep blocking & security analysis |
-| `test` | `prod` + FsTracing, StaticScanner, AuditScanner, SourceMaps | **Forensics** — same as `dev` |
+| `prod` | CrashGuard, LogTracing, GracefulShutdown | **Stability** — minimal overhead, high safety |
+| `dev` | `prod` + FsTracing + StaticScanner, AuditScanner, SourceMaps _(when `workspaceDir` set)_ | **Forensics** — deep blocking & security analysis |
+| `test` | `prod` + FsTracing + StaticScanner, AuditScanner, SourceMaps _(when `workspaceDir` set)_ | **Forensics** — same as `dev` |
 
 ### App Type Presets
 
 | `appType` | Modules Enabled | Optimization Target |
 |---|---|---|
-| `'web'` | HttpTracing, Socket Leak Monitor, Auto-Patching | **Latency** — request/response & socket tracking |
-| `'db'` | QueryAnalysis, Connection Leak Monitor, Auto-Patching | **Data Access** — query patterns & connection safety |
-| `'worker'` | RuntimeMonitor (CPU/Mem), Handle Leak Monitor, Auto-Patching | **Throughput** — long-running safety & loop health |
+| `'web'` | HttpTracing, ResourceLeakMonitor, Auto-Patching | **Latency** — request/response & socket tracking |
+| `'db'` | QueryAnalysis, SlowQueryMonitor, ResourceLeakMonitor, Auto-Patching | **Data Access** — query patterns & connection safety |
+| `'worker'` | RuntimeMonitor (CPU/Mem), GcMonitor, ResourceLeakMonitor, Auto-Patching | **Throughput** — long-running safety & loop health |
 | `['web','db']` | Union of `web` + `db` | **Hybrid** — full HTTP + query coverage |
 | `['web','db','worker']` | All modules | **Full-Stack** — maximum observability |
 
@@ -378,7 +262,7 @@ const result = DiagnosticAgent.detectAppTypes('./my-service');
 | `worker` | bull, bullmq, agenda, bee-queue, pg-boss, node-cron, amqplib, kafkajs, piscina, … |
 
 > [!NOTE]
-> If no packages match and `environment` is `dev` or `test`, the agent emits an `'info'` event advising you to set `appType` explicitly. In `prod`, it starts silently with only the environment-level modules (CrashGuard, LogTracing).
+> If no packages match and `environment` is `dev` or `test`, the agent emits an `'info'` event advising you to set `appType` explicitly. In `prod`, it starts silently with only the environment-level modules (CrashGuard, LogTracing, GracefulShutdown).
 
 ---
 
@@ -404,6 +288,13 @@ const agent = await DiagnosticAgent.create()
   })
   .withGracefulShutdown({ timeoutMs: 5000 })         // SIGTERM/SIGINT → flush → process.exit
   .withQueryAnalysis()                               // AST-based N+1 & query fix suggestions
+  .withSlowQueryMonitor({ defaultThresholdMs: 500 }) // Per-driver slow query log (top-5)
+  .withTransactionMonitor()                          // BEGIN/COMMIT/ROLLBACK duration tracking
+  .withCacheMonitor({ minHitRate: 0.6 })            // Cache hit-rate degradation detection
+  .withGcMonitor({ pausePctThreshold: 15 })         // GC pressure detection
+  .withPoolMonitor()                                 // Connection pool exhaustion & slow-acquire
+  .withDnsMonitor({ slowThresholdMs: 200 })         // DNS resolution latency tracking
+  .withAdaptiveSampler({ burst: 20 })               // Token-bucket rate limiter under high load
   .withStaticScanner(process.cwd())                 // ⚠ DEV ONLY — background tsc/eslint
   .withAuditScanner(process.cwd())                  // ⚠ DEV ONLY — npm audit CVE scan
   .withExporter({
@@ -413,9 +304,98 @@ const agent = await DiagnosticAgent.create()
     ca:   fs.readFileSync('./certs/ca.crt'),
   })
   .start();
+
+// Register pools after start (requires .withPoolMonitor())
+agent.watchPool(pgPool, 'pg');
+agent.watchPool(mysql2Pool, 'mysql2');
 ```
 
 Every `.with*()` method is **optional** — enable only what you need. All internal event wiring, entropy scrubbing, and p99 aggregation happens automatically.
+
+### Slow Query Monitor
+
+```typescript
+.withSlowQueryMonitor({
+  defaultThresholdMs: 1000,           // global fallback threshold (default: 1000)
+  thresholds: { pg: 500, redis: 50 }, // per-driver overrides (also configurable via env vars)
+  topN: 5,                            // top-N slowest queries retained in memory (default: 5)
+})
+```
+
+Fires `'slow-query'` when a query exceeds the threshold for its driver. Access the log via `agent.getSlowQueries()` / `agent.getSlowestQuery()` / `agent.clearSlowQueries()`.
+
+### Transaction Monitor
+
+```typescript
+.withTransactionMonitor({
+  maxOpenMs: 60_000,  // evict open transactions after this duration (default: 60 000)
+})
+```
+
+Detects BEGIN/COMMIT/ROLLBACK patterns in traced queries. Fires `'transaction'` with duration, query count, and whether the transaction was aborted.
+
+### Cache Monitor
+
+```typescript
+.withCacheMonitor({
+  windowMs: 60_000,   // sliding window size (default: 60 000)
+  minSamples: 10,     // minimum samples before an event can fire (default: 10)
+  minHitRate: 0.5,    // fire when hit rate drops below this value 0–1 (default: 0.5)
+})
+```
+
+Monitors cache hit/miss ratios for traced drivers (Redis, Memcached). Fires `'cache-degraded'` when the hit rate falls below `minHitRate` within the window.
+
+### GC Monitor
+
+```typescript
+.withGcMonitor({
+  windowMs: 10_000,       // sliding window for pressure calculation (default: 10 000)
+  pausePctThreshold: 10,  // fire when GC consumes ≥ this % of the window (default: 10)
+})
+```
+
+Observes GC performance entries via `node:perf_hooks`. Fires `'gc-pressure'` with total pause time, pause percentage, and GC cycle count.
+
+### Pool Monitor
+
+```typescript
+.withPoolMonitor({
+  maxWaitingCount: 3,     // fire 'pool-exhaustion' when this many clients wait (default: 3)
+  maxWaitMs: 1000,        // fire 'slow-acquire' when acquiring takes longer (default: 1000)
+  checkIntervalMs: 5000,  // poll interval for pool statistics (default: 5000)
+})
+```
+
+After calling `.withPoolMonitor()`, register each pool instance:
+
+```typescript
+agent.watchPool(pgPool, 'pg');
+agent.watchPool(mysql2Pool, 'mysql2');
+```
+
+Compatible with any pool that exposes `totalCount` / `idleCount` / `waitingCount` getters and/or emits an `'acquire'` event (`pg.Pool`, `mysql2` pool, `generic-pool`).
+
+### DNS Monitor
+
+```typescript
+.withDnsMonitor({
+  slowThresholdMs: 100,  // fire 'slow-dns' above this duration (default: 100)
+})
+```
+
+Wraps `dns.lookup` to track every resolution. Fires `'dns'` for each lookup and `'slow-dns'` for those exceeding the threshold.
+
+### Adaptive Sampler
+
+```typescript
+.withAdaptiveSampler({
+  ratePerMs: 1 / 1000,  // token refill rate — 1 token/sec by default
+  burst: 10,            // max bucket depth / burst capacity (default: 10)
+})
+```
+
+Token-bucket rate limiter applied per event category (`'query'`, `'http'`). Under sustained high throughput, events beyond the bucket capacity are silently dropped, capping agent overhead without disabling monitoring.
 
 ### Manually tracing unsupported drivers
 
@@ -430,6 +410,59 @@ const rows = await agent.traceQuery(
 
 ---
 
+## Instance Methods
+
+After calling `.start()`, the agent exposes several utility methods:
+
+### Slow query log
+
+```typescript
+agent.getSlowQueries(): SlowQueryRecord[]   // top-N slowest queries, sorted slowest first
+agent.getSlowestQuery(): SlowQueryRecord | undefined
+agent.clearSlowQueries(): void              // reset the log (useful between test cases)
+```
+
+Requires `.withSlowQueryMonitor()`. Returns an empty array / `undefined` if not enabled.
+
+### Pool registration
+
+```typescript
+agent.watchPool(pool: PoolLike, driver: string): this
+```
+
+Register a connection pool for monitoring. Safe to call before or after `.start()`. Requires `.withPoolMonitor()`.
+
+### Request tracing middleware
+
+```typescript
+app.use(agent.createMiddleware());
+```
+
+Connect-compatible middleware that reads the incoming `traceparent` W3C header and runs the request inside a `RequestContext`. All queries and HTTP calls within the same async chain automatically carry the same `traceId` and `correlationId`. Compatible with Express, Fastify (express-compat), Koa-connect, and raw Node HTTP.
+
+### Manual context (background jobs / queue workers)
+
+```typescript
+import { runWithContext } from 'argus';
+
+const ctx = agent.createContext('JOB', '/process-order');
+runWithContext(ctx, async () => {
+  // all traced queries here carry ctx.traceId
+  await processOrder(orderId);
+});
+```
+
+### Source map resolution
+
+```typescript
+const original = await agent.resolvePosition('./dist/index.js', 42, 15);
+// { source: 'src/handlers/order.ts', line: 10, column: 3 }
+```
+
+Requires `.withSourceMaps()`.
+
+---
+
 ## Events Reference
 
 The agent is an `EventEmitter`. All events are emitted on the `DiagnosticAgent` instance:
@@ -437,10 +470,18 @@ The agent is an `EventEmitter`. All events are emitted on the `DiagnosticAgent` 
 | Event | Payload | When |
 |---|---|---|
 | `'anomaly'` | `ProfilerEvent` | Memory leak, event loop lag, CPU spike detected |
-| `'query'` | `{ sanitizedQuery, driverName, durationMs, suggestions }` | DB query completed |
+| `'query'` | `{ sanitizedQuery, durationMs, driver?, traceId?, correlationId?, cacheHit?, suggestions? }` | DB query completed |
+| `'slow-query'` | `SlowQueryRecord` | Query exceeded the per-driver threshold |
+| `'transaction'` | `TransactionEvent` | BEGIN/COMMIT/ROLLBACK pattern completed |
+| `'cache-degraded'` | `CacheDegradedEvent` | Cache hit rate dropped below `minHitRate` |
+| `'gc-pressure'` | `GcPressureEvent` | GC pause % exceeded threshold in the window |
+| `'pool-exhaustion'` | `PoolExhaustionEvent` | Waiting client count exceeded `maxWaitingCount` |
+| `'slow-acquire'` | `SlowAcquireEvent` | Connection acquire time exceeded `maxWaitMs` |
 | `'http'` | `{ method, url, statusCode, durationMs, suggestions }` | HTTP request completed |
+| `'dns'` | `DnsEvent` | DNS lookup completed |
+| `'slow-dns'` | `DnsEvent` | DNS lookup exceeded `slowThresholdMs` |
 | `'fs'` | `{ operation, path, durationMs, suggestions }` | File system operation completed |
-| `'log'` | `{ level, sanitizedPayload, suggestions }` | `console.*` call intercepted |
+| `'log'` | `{ level, scrubbed, durationMs, suggestions? }` | `console.*` call intercepted |
 | `'crash'` | `CrashEvent` | `uncaughtException` or `unhandledRejection` received |
 | `'leak'` | `ResourceLeakEvent` | Active OS handle count exceeded threshold |
 | `'scan'` | `StaticScanResult[]` | Background `tsc`/ESLint scan complete (dev/test only) |
@@ -450,27 +491,35 @@ The agent is an `EventEmitter`. All events are emitted on the `DiagnosticAgent` 
 
 ```typescript
 agent.on('anomaly', (event) => {
-  console.log(event.type);            // 'memory-leak' | 'event-loop-lag' | 'cpu-spike'
-  console.log(event.heapSnapshotPath); // set only when snapshot write succeeded
+  console.log(event.type);             // 'memory-leak' | 'event-loop-lag' | 'cpu-spike'
+  console.log(event.heapSnapshotPath); // only set when a snapshot write succeeded
 });
 
 agent.on('crash', (event) => {
-  console.log(event.type);            // 'uncaughtException' | 'unhandledRejection'
+  console.log(event.type); // 'uncaughtException' | 'unhandledRejection'
   // NOTE: unhandledRejection does NOT call process.exit — your app keeps running
 });
 
 agent.on('query', (trace) => {
-  console.log(trace.sanitizedQuery);  // values NEVER appear here — AST-scrubbed
-  trace.suggestions.forEach(s => console.log(s.rule, s.suggestedFix));
+  console.log(trace.sanitizedQuery); // bound values are NEVER here — AST-scrubbed
+  trace.suggestions?.forEach(s => console.log(s.rule, s.suggestedFix)); // present only with withQueryAnalysis()
 });
 
-agent.on('scan', (results) => {
-  const total = results.reduce((n, r) => n + r.totalIssues, 0);
-  console.log(`Static scan: ${total} issue(s)`);
+agent.on('slow-query', (record) => {
+  console.log(record.sanitizedQuery, record.durationMs, record.driver);
+  // agent.getSlowQueries() returns the persisted top-N log at any time
 });
 
-agent.on('audit', (result) => {
-  console.log(`npm audit: ${result.suggestions?.length ?? 0} high/critical CVE(s)`);
+agent.on('transaction', (event) => {
+  if (event.aborted) console.warn(`Rolled-back txn on ${event.driver} after ${event.durationMs}ms`);
+});
+
+agent.on('gc-pressure', (event) => {
+  console.warn(`GC consuming ${event.pausePct.toFixed(1)}% of CPU time`);
+});
+
+agent.on('pool-exhaustion', (event) => {
+  console.warn(`${event.driver} pool: ${event.waitingCount} clients queued`);
 });
 ```
 
@@ -486,11 +535,15 @@ All thresholds can be overridden without code changes, making the agent CI/CD an
 | Variable | Default | Controls |
 |---|---|---|
 | `DIAGNOSTIC_AGENT_ENABLED` | `true` | Set to `false` or `0` for a zero-CPU-overhead global kill-switch |
+| `DIAGNOSTIC_DEBUG` | `false` | Set to `true` to enable the built-in console logger for all agent events |
 | `RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS` | `50` | Minimum lag (ms) before an event-loop anomaly fires |
 | `RUNTIME_MONITOR_MEMORY_GROWTH_BYTES` | `10485760` (10 MB) | Minimum heap growth before a memory-leak anomaly fires |
 | `RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS` | `60000` | Minimum ms between back-to-back CPU profiles |
 | `RUNTIME_MONITOR_CHECK_INTERVAL_MS` | `1000` | How often thresholds are polled |
 | `RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS` | `500` | Duration of each CPU profile capture |
+| `RUNTIME_MONITOR_HEAP_USAGE_PCT_THRESHOLD` | `90` | Heap usage % of `heapTotal` before a memory anomaly fires |
+| `ARGUS_SLOW_QUERY_THRESHOLD_MS` | `1000` | Global slow query threshold used when no per-driver default applies |
+| `ARGUS_SLOW_QUERY_THRESHOLD_<DRIVER>` | (per-driver) | Per-driver threshold override. Key is the driver name uppercased with non-alphanumeric runs replaced by `_` — e.g. `ARGUS_SLOW_QUERY_THRESHOLD_PG=500`, `ARGUS_SLOW_QUERY_THRESHOLD_REDIS=50`, `ARGUS_SLOW_QUERY_THRESHOLD_ELASTIC_ELASTICSEARCH=300` |
 
 > [!TIP]
 > Malformed values (non-numeric, `0`, negative) are silently ignored and replaced with the default. This means misconfigured infrastructure cannot accidentally disable monitoring.
@@ -513,13 +566,20 @@ All thresholds can be overridden without code changes, making the agent CI/CD an
 | `.withLogTracing(opts?)` | ✅ Yes | Low | `console.*` override with entropy-scrubbed payloads |
 | `.withFsTracing()` | ❌ **No** | High | Patches `fs`. Detects `*Sync` blockers. **DEV ONLY.** |
 | `.withQueryAnalysis()` | ✅ Yes | Medium (AST) | N+1 detection + query fix suggestions |
+| `.withSlowQueryMonitor(opts?)` | ✅ Yes | Very Low | Per-driver slow query detection + top-N log |
+| `.withTransactionMonitor(opts?)` | ✅ Yes | Very Low | BEGIN/COMMIT/ROLLBACK duration tracking |
+| `.withCacheMonitor(opts?)` | ✅ Yes | Very Low | Cache hit-rate degradation detection |
+| `.withGcMonitor(opts?)` | ✅ Yes | Very Low | GC pause pressure detection via `perf_hooks` |
+| `.withPoolMonitor(opts?)` | ✅ Yes | Low | Connection pool exhaustion & slow-acquire |
+| `.withDnsMonitor(opts?)` | ✅ Yes | Low | DNS lookup latency tracking |
+| `.withAdaptiveSampler(opts?)` | ✅ Yes | Very Low | Token-bucket rate limiter under high load |
 | `.withStaticScanner(dir)` | ❌ **No** | High | Background `tsc`/ESLint scan. **DEV ONLY.** |
 | `.withAuditScanner(dir)` | ❌ **No** | High | Spawns `npm audit`. **DEV/startup ONLY.** |
 | `.withExporter(config)` | ✅ Yes | Very Low | OTLP JSON export over mTLS |
 | `.withAggregatorWindow(ms)` | ✅ Yes | None | Override p99 sliding window (default: 60 s) |
 | `.withEntropyThreshold(n)` | ✅ Yes | None | Override Shannon entropy threshold (default: 4.0) |
 | `.start()` | — | — | Async — initialize all subsystems and begin monitoring |
-| `.stop()` | — | — | Sync — tear down and flush remaining telemetry |
+| `.stop()` | — | — | Async — tear down and flush remaining telemetry |
 
 ---
 
@@ -553,22 +613,27 @@ Telemetry is exported over **mTLS** (Mutual TLS) — both client and server cert
 ## Architecture Layers
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  DiagnosticAgent                     │  ← Fluent builder / event bus
-├─────────────┬──────────────────────┬────────────────┤
-│ Profiling   │  Instrumentation     │  Analysis      │
-│ ─────────── │  ────────────────── │  ────────────  │
-│ RuntimeMon  │  InstrumentEngine   │  QueryAnalyzer │
-│ CrashGuard  │  16 DB Drivers      │  StaticScanner │
-│ LeakMonitor │  HttpTracer         │  AuditScanner  │
-│ SrcMapRes.  │  FsTracer / Logger  │                │
-├─────────────┴──────────────────────┴────────────────┤
-│          AstSanitizer + EntropyChecker              │  ← Privacy firewall (always on)
-├─────────────────────────────────────────────────────┤
-│        MetricsAggregator (p99 sliding window)        │
-├─────────────────────────────────────────────────────┤
-│              OTLPExporter (mTLS)                     │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                        DiagnosticAgent                            │  ← Fluent builder / event bus
+├──────────────────┬─────────────────────────┬─────────────────────┤
+│ Profiling        │  Instrumentation         │  Analysis           │
+│ ──────────────── │  ─────────────────────  │  ─────────────────  │
+│ RuntimeMonitor   │  InstrumentationEngine  │  QueryAnalyzer      │
+│ CrashGuard       │  16 DB Drivers          │  SlowQueryMonitor   │
+│ ResourceLeakMon  │  HttpInstrumentation    │  TransactionMonitor │
+│ GcMonitor        │  FsInstrumentation      │  CacheMonitor       │
+│ PoolMonitor      │  LoggerInstrumentation  │  CircuitBreaker     │
+│ SourceMapResolver│  DnsMonitor             │  StaticScanner      │
+│ WorkerThreadsMon │  AdaptiveSampler        │  AuditScanner       │
+│ SlowRequireDet.  │                         │  ExplainAnalyzer    │
+│ StreamLeakDet.   │                         │                     │
+├──────────────────┴─────────────────────────┴─────────────────────┤
+│               AstSanitizer + EntropyChecker                       │  ← Privacy firewall (always on)
+├──────────────────────────────────────────────────────────────────┤
+│             MetricsAggregator (p99 sliding window)                │
+├──────────────────────────────────────────────────────────────────┤
+│         OTLPExporter (mTLS)  /  OTLPCompatibleExporter (API key) │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -576,71 +641,86 @@ Telemetry is exported over **mTLS** (Mutual TLS) — both client and server cert
 ## Project Structure
 
 ```
-src/
-  index.ts                         → Public API barrel export
-  diagnostic-agent.ts              → Fluent builder + createProfile API
+packages/agent/
+  src/
+    index.ts                         → Public API barrel export
+    diagnostic-agent.ts              → Fluent builder, public API surface & lifecycle
 
-  profiling/
-    app-type-detector.ts           → package.json fingerprint scanner
-    runtime-monitor.ts             → Event loop lag & heap snapshot profiling
-    crash-guard.ts                 → uncaughtException / unhandledRejection handler
-    graceful-shutdown.ts           → SIGTERM/SIGINT flush with configurable timeout
-    resource-leak-monitor.ts       → OS handle / socket leak detection
-    slow-require-detector.ts       → CJS module load-time tracking (Node 20+)
-    stream-leak-detector.ts        → Readable/Writable stream leak detection
-    worker-threads-monitor.ts      → Worker pool depth & anomaly tracking (Node 22+)
-    source-map-resolver.ts         → .js.map scanning & lazy resolution
+    internal/
+      profile-factory.ts             → buildAgentProfile() — preset resolution for createProfile()
+      query-handler.ts               → createQueryHandler() — per-query sampling/analysis/slow-log closure
+      console-logger.ts              → installConsoleLogger() — DIAGNOSTIC_DEBUG event formatting
 
-  instrumentation/
-    safe-channel.ts                → Backward-compatible diagnostics_channel loader (Node 14.18+)
-    engine.ts                      → Core InstrumentationEngine
-    correlation.ts                 → AsyncLocalStorage request context & correlationId
-    http.ts                        → HTTP tracing (channel path Node 18+; monkey-patch Node 14–17)
-    fs.ts                          → File system operation tracing
-    logger.ts                      → console.* override with entropy scrubbing
-    drivers/
-      index.ts                     → Driver registry (apply / remove patches)
-      patch-utils.ts               → Shared wrapping utilities & PATCHED_SYMBOL
-      pg.ts                        → PostgreSQL
-      mysql.ts                     → MySQL / Aurora (mysql2)
-      mongodb.ts                   → MongoDB
-      mssql.ts                     → MSSQL / tedious
-      sqlite.ts                    → better-sqlite3
-      prisma.ts                    → @prisma/client
-      redis.ts                     → ioredis + node-redis
-      dynamodb.ts                  → @aws-sdk/client-dynamodb
-      firestore.ts                 → @google-cloud/firestore
-      cassandra.ts                 → cassandra-driver
-      elasticsearch.ts             → @elastic/elasticsearch
-      bigquery.ts                  → @google-cloud/bigquery
-      neo4j.ts                     → neo4j-driver
-      clickhouse.ts                → @clickhouse/client
+    profiling/
+      app-type-detector.ts           → package.json fingerprint scanner
+      runtime-monitor.ts             → Event loop lag & heap snapshot profiling
+      crash-guard.ts                 → uncaughtException / unhandledRejection handler
+      graceful-shutdown.ts           → SIGTERM/SIGINT flush with configurable timeout
+      resource-leak-monitor.ts       → OS handle / socket leak detection
+      slow-require-detector.ts       → CJS module load-time tracking (Node 20+)
+      stream-leak-detector.ts        → Readable/Writable stream leak detection
+      worker-threads-monitor.ts      → Worker pool depth & anomaly tracking (Node 22+)
+      source-map-resolver.ts         → .js.map scanning & lazy resolution
+      gc-monitor.ts                  → GC pressure detection via perf_hooks
+      pool-monitor.ts                → Connection pool exhaustion & slow-acquire
 
-  licensing/
-    public-key.ts                  → Bundled ECDSA public keys (keyed by kid)
-    license-validator.ts           → JWT ES256 signature + expiry validation
-    clock-guard.ts                 → Monotonic clock-rollback detection (enterprise)
-    expiry-signal.ts               → Writes expiry notice to cwd / tmpdir / homedir
+    instrumentation/
+      safe-channel.ts                → Backward-compatible diagnostics_channel loader (Node 14.18+)
+      engine.ts                      → Core InstrumentationEngine
+      correlation.ts                 → AsyncLocalStorage request context & correlationId
+      http.ts                        → HTTP tracing (channel path Node 18+; monkey-patch Node 14–17)
+      fs.ts                          → File system operation tracing
+      logger.ts                      → console.* override with entropy scrubbing
+      dns-monitor.ts                 → DNS lookup latency tracking
+      adaptive-sampler.ts            → Token-bucket adaptive sampler
+      drivers/
+        index.ts                     → Driver registry (apply / remove patches)
+        patch-utils.ts               → Shared wrapping utilities & PATCHED_SYMBOL
+        pg.ts                        → PostgreSQL
+        mysql.ts                     → MySQL / Aurora (mysql2)
+        mongodb.ts                   → MongoDB
+        mssql.ts                     → MSSQL / tedious
+        sqlite.ts                    → better-sqlite3
+        prisma.ts                    → @prisma/client
+        redis.ts                     → ioredis + node-redis
+        dynamodb.ts                  → @aws-sdk/client-dynamodb
+        firestore.ts                 → @google-cloud/firestore
+        cassandra.ts                 → cassandra-driver
+        elasticsearch.ts             → @elastic/elasticsearch
+        bigquery.ts                  → @google-cloud/bigquery
+        neo4j.ts                     → neo4j-driver
+        clickhouse.ts                → @clickhouse/client
 
-  sanitization/
-    ast-sanitizer.ts               → SQL AST scrubbing (node-sql-parser)
-    entropy-checker.ts             → Shannon entropy secret detection
+    licensing/
+      public-key.ts                  → Bundled ECDSA public keys (keyed by kid)
+      license-validator.ts           → JWT ES256 signature + expiry validation
+      clock-guard.ts                 → Monotonic clock-rollback detection (enterprise)
+      expiry-signal.ts               → Writes expiry notice to cwd / tmpdir / homedir
 
-  analysis/
-    types.ts                       → Shared FixSuggestion & analysis types
-    query-analyzer.ts              → AST-based query fix suggestions + N+1 detection
-    fs-analyzer.ts                 → Sync FS blocker & path traversal detection
-    http-analyzer.ts               → Insecure URL & slow request detection
-    log-analyzer.ts                → Log storm & payload size detection
-    circuit-breaker-detector.ts    → Sustained error-rate detection across drivers
-    static-scanner.ts              → Background tsc / ESLint issue tracking
-    audit-scanner.ts               → npm audit CVE scanning
+    sanitization/
+      ast-sanitizer.ts               → SQL AST scrubbing (node-sql-parser)
+      entropy-checker.ts             → Shannon entropy secret detection
 
-  export/
-    aggregator.ts                  → p99 sliding window metric aggregation
-    exporter.ts                    → OTLP JSON formatter + mTLS transport
+    analysis/
+      types.ts                       → Shared FixSuggestion & analysis types
+      query-analyzer.ts              → AST-based query fix suggestions + N+1 detection
+      slow-query-monitor.ts          → Per-driver slow query detection + top-N log
+      transaction-monitor.ts         → BEGIN/COMMIT/ROLLBACK duration tracking
+      cache-monitor.ts               → Cache hit-rate degradation detection
+      explain-analyzer.ts            → EXPLAIN plan analysis for supported drivers
+      fs-analyzer.ts                 → Sync FS blocker & path traversal detection
+      http-analyzer.ts               → Insecure URL & slow request detection
+      log-analyzer.ts                → Log storm & payload size detection
+      circuit-breaker-detector.ts    → Sustained error-rate detection across drivers
+      static-scanner.ts              → Background tsc / ESLint issue tracking
+      audit-scanner.ts               → npm audit CVE scanning
 
-tests/                             → Mirrors src/ structure (373 tests, 86 suites)
+    export/
+      aggregator.ts                  → p99 sliding window metric aggregation
+      exporter.ts                    → OTLP JSON formatter + mTLS transport
+      otlp-compatible-exporter.ts    → Simplified OTLP exporter (API key, no mTLS)
+
+  tests/                             → Mirrors src/ structure (373 tests, 86 suites)
 ```
 
 ---
@@ -649,52 +729,36 @@ tests/                             → Mirrors src/ structure (373 tests, 86 sui
 
 All subsystems are exported individually for advanced composition:
 
+Every subsystem is individually exported — TypeScript autocomplete surfaces the full list. A few useful standalone examples:
+
 ```typescript
-import {
-  // Profiling
-  SourceMapResolver,
-  RuntimeMonitor,
-  CrashGuard,
-  GracefulShutdown,
-  ResourceLeakMonitor,
-  SlowRequireDetector,
-  StreamLeakDetector,
-  WorkerThreadsMonitor,
-
-  // Instrumentation
-  InstrumentationEngine,
-  HttpInstrumentation,
-  FsInstrumentation,
-  Logger,
-
-  // Sanitization
-  AstSanitizer,
-  EntropyChecker,
-
-  // Analysis
-  QueryAnalyzer,
-  HttpAnalyzer,
-  FsAnalyzer,
-  LogAnalyzer,
-  CircuitBreakerDetector,
-
-  // Export
-  MetricsAggregator,
-  OTLPExporter,
-} from 'argus';
-
-// Example: standalone entropy checker
+// Scrub a string manually
 import { EntropyChecker } from 'argus';
-const checker = new EntropyChecker();
-const sanitized = checker.scrub('Bearer eyJhbGc...');  // → 'Bearer [REDACTED]'
+const sanitized = new EntropyChecker().scrub('Bearer eyJhbGc...');
+// → 'Bearer [REDACTED]'
 
-// Example: standalone circuit-breaker detector
+// Detect connection-pool circuit-break conditions without the full agent
 import { CircuitBreakerDetector } from 'argus';
-const cbd = new CircuitBreakerDetector();
-const suggestions = cbd.analyze(recentQueryEvents);
+const suggestions = new CircuitBreakerDetector().analyze(recentQueryEvents);
+
+// Ship metrics to Honeycomb / New Relic / Datadog without mTLS
+import { OTLPCompatibleExporter } from 'argus';
+const exporter = new OTLPCompatibleExporter({
+  endpointUrl: 'https://api.honeycomb.io/v1/metrics',
+  apiKey: process.env.HONEYCOMB_API_KEY,
+  serviceName: 'my-service',
+});
+await exporter.export(aggregatorEvents);
+
+// Manual async-context propagation (background jobs, queue workers)
+import { runWithContext } from 'argus';
+runWithContext(agent.createContext('WORKER', '/process-job'), async () => {
+  // all traced queries here carry the same traceId
+  await processJob();
+});
 ```
 
-> **Source mode (contributors):** replace `'argus'` with `'./src/index.ts'` and run with `node --experimental-strip-types` on Node 22.6+.
+> **Source mode (contributors):** replace `'argus'` with `'./packages/agent/src/index.ts'` and run with `node --experimental-strip-types` on Node 22.6+.
 
 ---
 
@@ -750,6 +814,8 @@ Open `http://localhost:16686` to browse traces.
 
 > [!NOTE]
 > The `key`/`cert`/`ca` fields in `withExporter` are optional — omit them for plaintext local endpoints. mTLS is only needed for production remote collectors.
+>
+> For **cloud SaaS destinations** (Honeycomb, New Relic, Datadog) that authenticate via an API key rather than mTLS, use `OTLPCompatibleExporter` from the [Low-Level API](#low-level-api) instead — no license required.
 
 ---
 

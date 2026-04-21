@@ -39,12 +39,9 @@ export class SlowRequireDetector extends EventEmitter {
     this.active = true;
 
     try {
-      // diagnostics_channel 'module.cjs.load' available in Node 20+
-      // Message shape: { filename: string, require: NodeRequire }
+      // 'module.cjs.load.start' / '.finish' channels ship in Node 20+ and are
+      // the only supported path — Node 22 is the minimum runtime for source execution.
       const dc = getDiagnosticsChannel();
-      if (!dc) return this;
-
-      const channel = dc.channel("module.cjs.load");
       const startTimes = new Map<string, number>();
 
       const beforeLoad = (msg: unknown) => {
@@ -66,22 +63,15 @@ export class SlowRequireDetector extends EventEmitter {
         }
       };
 
-      // Node 20+ has channel.subscribe; some versions use separate before/after channels
-      const beforeChannel = dc.channel("module.cjs.load.start");
-      const afterChannel = dc.channel("module.cjs.load.finish");
+      const beforeChannel = "module.cjs.load.start";
+      const afterChannel = "module.cjs.load.finish";
 
-      if (typeof beforeChannel.subscribe === "function") {
-        beforeChannel.subscribe(beforeLoad);
-        afterChannel.subscribe(afterLoad);
-        this.subscription = () => {
-          beforeChannel.unsubscribe?.(beforeLoad);
-          afterChannel.unsubscribe?.(afterLoad);
-        };
-      } else {
-        // Fallback: single channel
-        channel.subscribe(beforeLoad);
-        this.subscription = () => channel.unsubscribe?.(beforeLoad);
-      }
+      dc.subscribe(beforeChannel, beforeLoad);
+      dc.subscribe(afterChannel, afterLoad);
+      this.subscription = () => {
+        dc.unsubscribe(beforeChannel, beforeLoad);
+        dc.unsubscribe(afterChannel, afterLoad);
+      };
     } catch {
       // diagnostics_channel not available — detector is a no-op
     }

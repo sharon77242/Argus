@@ -65,7 +65,6 @@ export class WorkerThreadsMonitor extends EventEmitter {
     // Attempt to hook via diagnostics_channel (Node 22+)
     try {
       const dc = getDiagnosticsChannel();
-      if (!dc) throw new Error("unavailable");
       const ch = dc.channel("worker_threads.Worker.created");
       ch.subscribe(() => {
         this.activeWorkers++;
@@ -77,7 +76,7 @@ export class WorkerThreadsMonitor extends EventEmitter {
 
     // Start polling loop for anomaly detection
     this.pollTimer = setInterval(() => this._checkAnomalies(), this.pollIntervalMs);
-    if (this.pollTimer.unref) this.pollTimer.unref();
+    this.pollTimer.unref();
 
     return this;
   }

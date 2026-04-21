@@ -249,7 +249,7 @@ describe("RuntimeMonitor (coverage)", () => {
     const result = await Promise.race([anomalyPromise, errorPromise, timeout]);
 
     // The event was emitted — either a profile was captured or an error occurred
-    assert.ok(result !== undefined, "Should have emitted anomaly or error");
+    assert.ok(typeof result === "object", "Should have emitted a ProfilerEvent or Error object");
   });
 
   // ── captureCpuProfile full path: null guards inside callbacks ─────────────

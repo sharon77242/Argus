@@ -138,12 +138,14 @@ export class SlowQueryMonitor {
   public check(
     sanitizedQuery: string,
     durationMs: number,
-    driver: string,
+    /** Driver name. When `undefined` slow-query classification is skipped and `null` is returned. */
+    driver: string | undefined,
     timestamp: number,
     sourceLine?: string,
     correlationId?: string,
     traceId?: string,
   ): SlowQueryRecord | null {
+    if (!driver) return null;
     const thresholdMs = this.getThreshold(driver);
     if (durationMs < thresholdMs) return null;
 

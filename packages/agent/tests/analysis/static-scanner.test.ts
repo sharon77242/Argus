@@ -1,12 +1,22 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { StaticScanner } from "../../src/analysis/static-scanner.ts";
 import type { ScanResult } from "../../src/analysis/types.ts";
 
+// A minimal fixture project with exactly one clean .ts file and its own
+// tsconfig.json. Using process.cwd() (the full agent project) is fragile
+// because the agent's tsconfig includes tests/, so any TS issue introduced
+// in ANY test file would cause this assertion to fail non-deterministically.
+const CLEAN_FIXTURE_DIR = join(
+  import.meta.dirname,
+  "../fixtures/static-scanner-clean",
+);
+
 describe("StaticScanner", () => {
   it("should run TypeScript scan and return a ScanResult", async () => {
-    // Scan our own project — it should pass cleanly (0 issues)
-    const scanner = new StaticScanner(process.cwd());
+    // Scan the clean fixture — scope is limited to one pristine .ts file
+    const scanner = new StaticScanner(CLEAN_FIXTURE_DIR);
     const result = await scanner.runTypeScript();
 
     assert.strictEqual(result.tool, "tsc");
@@ -14,7 +24,7 @@ describe("StaticScanner", () => {
     assert.ok(typeof result.durationMs === "number");
     assert.ok(Array.isArray(result.suggestions));
 
-    // Our project should be clean
+    // The fixture has zero TypeScript issues by design
     assert.strictEqual(
       result.totalIssues,
       0,

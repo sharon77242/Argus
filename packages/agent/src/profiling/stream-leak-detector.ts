@@ -57,7 +57,6 @@ export class StreamLeakDetector extends EventEmitter {
 
     try {
       const dc = getDiagnosticsChannel();
-      if (!dc) throw new Error("unavailable");
       const createChannel = dc.channel("stream.create");
       const destroyChannel = dc.channel("stream.destroy");
 
@@ -78,7 +77,7 @@ export class StreamLeakDetector extends EventEmitter {
     }
 
     this.checkTimer = setInterval(() => this._checkLeaks(), this.checkIntervalMs);
-    if (this.checkTimer.unref) this.checkTimer.unref();
+    this.checkTimer.unref();
 
     return this;
   }

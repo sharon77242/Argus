@@ -7,7 +7,6 @@ import {
 } from "./profiling/runtime-monitor.ts";
 import {
   InstrumentationEngine,
-  type TracedQuery,
   type InstrumentationOptions,
 } from "./instrumentation/engine.ts";
 import { MetricsAggregator, type AggregatorEvent } from "./export/aggregator.ts";
@@ -59,6 +58,12 @@ import { validateLicense, type LicenseClaims } from "./licensing/license-validat
 import { checkClockIntegrity } from "./licensing/clock-guard.ts";
 import { writeExpirySignal } from "./licensing/expiry-signal.ts";
 import { GracefulShutdown, type GracefulShutdownOptions } from "./profiling/graceful-shutdown.ts";
+import { buildAgentProfile } from "./internal/profile-factory.ts";
+import { createQueryHandler } from "./internal/query-handler.ts";
+import {
+  installConsoleLogger,
+  type DebugListener,
+} from "./internal/console-logger.ts";
 
 // WeakMap-based private storage for license claims — avoids exposing internal field on agent
 const licenseClaims = new WeakMap<DiagnosticAgent, LicenseClaims>();
@@ -152,7 +157,7 @@ export class DiagnosticAgent extends EventEmitter {
 
   private running = false;
   // Listeners added by useConsoleLogger — kept so they can be removed on stop().
-  private debugListeners: [string, (...args: unknown[]) => void][] = [];
+  private debugListeners: DebugListener[] = [];
 
   // Private constructor — use DiagnosticAgent.create()
   private constructor() {
@@ -188,8 +193,8 @@ export class DiagnosticAgent extends EventEmitter {
   public static createProfile(config: AgentProfileConfig): DiagnosticAgent {
     const agent = new DiagnosticAgent();
 
-    // Globally kill-switch the agent; .start() and .stop() will become 0-overhead
-    // Environment variables take precedence over config object
+    // Globally kill-switch the agent; .start() and .stop() will become 0-overhead.
+    // Environment variables take precedence over the config object.
     const envEnabled = process.env.DIAGNOSTIC_AGENT_ENABLED;
     const isGloballyDisabled =
       envEnabled !== undefined
@@ -201,75 +206,8 @@ export class DiagnosticAgent extends EventEmitter {
       return agent;
     }
 
-    const env = config.environment ?? "prod";
-
-    // Resolve app types — 'auto' triggers package.json scanning
-    let appTypes: AppType[];
-    const selectedType = config.appType ?? "auto";
-    if (selectedType === "auto") {
-      const detected = detectAppTypes(config.workspaceDir);
-      if (detected.types.length > 0) {
-        appTypes = detected.types;
-      } else {
-        // No recognized packages found — don’t silently assume 'web'.
-        // Emit a dev-time notice and apply no app-type-specific modules.
-        appTypes = [];
-        if (env !== "prod") {
-          // Delay to after construction so listeners can attach
-          setImmediate(() => {
-            agent.emit(
-              "info",
-              "DiagnosticAgent: auto-detection found no recognized app type in package.json. " +
-                'Pass appType explicitly ("web" | "db" | "worker") to enable app-specific monitoring.',
-            );
-          });
-        }
-      }
-    } else {
-      appTypes = Array.isArray(selectedType) ? selectedType : [selectedType];
-    }
-
-    // 1. Universal Production Safe Bindings
-    agent.withCrashGuard();
-    agent.withLogTracing();
-
-    // 2. Dev/Test Scanners (Non-Prod)
-    if (env === "dev" || env === "test") {
-      agent.withFsTracing();
-      if (config.workspaceDir) {
-        agent.withStaticScanner(config.workspaceDir);
-        agent.withAuditScanner(config.workspaceDir);
-        agent.withSourceMaps(config.workspaceDir);
-      }
-    }
-
-    // 3. Application Type Optimization — union modules from all specified types.
-    //    Each `with*()` call is idempotent, so duplicates across types are harmless.
-    for (const app of appTypes) {
-      switch (app) {
-        case "web":
-          agent.withHttpTracing();
-          agent.withResourceLeakMonitor(); // Catch Sockets
-          agent.withInstrumentation({ autoPatching: true }); // Catch remote db calls
-          break;
-        case "db":
-          agent.withQueryAnalysis(config.queryAnalysis ?? {});
-          agent.withSlowQueryMonitor(config.slowQueries ?? {});
-          agent.withInstrumentation({ autoPatching: true });
-          agent.withResourceLeakMonitor(); // Catch Db connection leaks
-          break;
-        case "worker":
-          agent.withRuntimeMonitor(); // Catch memory leaks/CPU hangs heavily
-          agent.withGcMonitor();
-          agent.withResourceLeakMonitor();
-          agent.withInstrumentation({ autoPatching: true });
-          break;
-      }
-    }
-
-    // Always register graceful shutdown so buffered telemetry is flushed on SIGTERM/SIGINT.
-    agent.withGracefulShutdown();
-
+    // Preset resolution and builder wiring is handled by the profile factory.
+    buildAgentProfile(agent, config);
     return agent;
   }
 
@@ -674,37 +612,16 @@ export class DiagnosticAgent extends EventEmitter {
     this.engine = new InstrumentationEngine(this.instrumentationOptions);
     const aggregator = this.aggregator!;
 
-    this.engine.on("query", (traced: TracedQuery) => {
-      // Adaptive sampling — drop event if bucket is empty
-      if (this.adaptiveSampler && !this.adaptiveSampler.shouldSample("query")) return;
-
-      const enriched = this.queryAnalyzer
-        ? { ...traced, suggestions: this.queryAnalyzer.analyze(traced.sanitizedQuery) }
-        : traced;
-
-      if (this.slowQueryMonitor && traced.driver) {
-        const slow = this.slowQueryMonitor.check(
-          traced.sanitizedQuery,
-          traced.durationMs,
-          traced.driver,
-          traced.timestamp,
-          traced.sourceLine,
-          traced.correlationId,
-          traced.traceId,
-        );
-        if (slow) {
-          aggregator.record(
-            "slow-query",
-            slow.durationMs,
-            slow as unknown as Record<string, unknown>,
-          );
-          this.emit("slow-query", slow);
-        }
-      }
-
-      aggregator.record("query", traced.durationMs, enriched as Record<string, unknown>);
-      this.emit("query", enriched);
-    });
+    this.engine.on(
+      "query",
+      createQueryHandler({
+        adaptiveSampler: this.adaptiveSampler,
+        queryAnalyzer: this.queryAnalyzer,
+        slowQueryMonitor: this.slowQueryMonitor,
+        aggregator,
+        emit: (event, data) => this.emit(event, data),
+      }),
+    );
 
     this.engine.enable();
 
@@ -749,7 +666,8 @@ export class DiagnosticAgent extends EventEmitter {
     }
 
     if (this.logTracingOptions) {
-      this.logTracingOptions.entropyThreshold ??= this.entropyThreshold;
+      this.logTracingOptions.entropyThreshold =
+        this.logTracingOptions.entropyThreshold ?? this.entropyThreshold;
       this.logTracker = new LoggerInstrumentation(
         () => this.engine?.extractSourceLine(),
         this.logTracingOptions,
@@ -932,79 +850,8 @@ export class DiagnosticAgent extends EventEmitter {
    *                `'verbose'` — also logs every query and HTTP request
    */
   private useConsoleLogger(prefix = "[DiagAgent]", level: "warn" | "verbose" = "verbose"): this {
-    const add = (event: string, fn: (...args: unknown[]) => void) => {
-      this.on(event, fn);
-      this.debugListeners.push([event, fn]);
-    };
-
-    add("anomaly", (a) => {
-      const ev = a as { type: string };
-      console.warn(`${prefix} ANOMALY type=${ev.type}`, a);
-    });
-    add("leak", (l) => {
-      const ev = l as { handlesCount: number };
-      console.warn(`${prefix} LEAK    handles=${ev.handlesCount}`);
-    });
-    add("crash", (c) => {
-      const ev = c as { error?: Error };
-      console.error(`${prefix} CRASH   ${ev.error?.message ?? String(c)}`);
-    });
-    add("error", (e) => {
-      const ev = e as Error | undefined;
-      console.error(`${prefix} ERROR   ${ev?.message ?? String(e)}`);
-    });
-    add("info", (m) => {
-      console.info(`${prefix} INFO    ${String(m)}`);
-    });
-    add("log", (l) => {
-      const ev = l as { scrubbed: boolean; level: string };
-      if (ev.scrubbed)
-        console.warn(`${prefix} SCRUB   console.${ev.level} contained secrets — redacted`);
-    });
-    add("slow-query", (s) => {
-      const ev = s as SlowQueryRecord;
-      console.warn(
-        `${prefix} SLOW    [${ev.durationMs.toFixed(1)}ms > ${ev.thresholdMs}ms] driver=${ev.driver} — ${ev.sanitizedQuery}`,
-      );
-    });
-    add("gc-pressure", (g) => {
-      const ev = g as GcPressureEvent;
-      console.warn(
-        `${prefix} GC      [${ev.totalPauseMs.toFixed(1)}ms | ${ev.pausePct.toFixed(1)}% of ${ev.windowMs}ms window] ${ev.gcCount} cycles`,
-      );
-    });
-    add("pool-exhaustion", (p) => {
-      const ev = p as PoolExhaustionEvent;
-      console.warn(
-        `${prefix} POOL    [${ev.driver}] waiting=${ev.waitingCount} idle=${ev.idleCount} total=${ev.totalCount}`,
-      );
-    });
-    add("slow-acquire", (s) => {
-      const ev = s as SlowAcquireEvent;
-      console.warn(`${prefix} POOL    [${ev.driver}] slow acquire ${ev.waitMs.toFixed(0)}ms`);
-    });
-
-    if (level === "verbose") {
-      add("query", (q) => {
-        const ev = q as {
-          durationMs: number;
-          sanitizedQuery: string;
-          suggestions?: { message: string }[];
-        };
-        const hints = ev.suggestions?.map((s) => s.message).join(" | ");
-        const suffix = hints ? `\n  ⚠ ${hints}` : "";
-        console.log(
-          `${prefix} QUERY   [${ev.durationMs.toFixed(1)}ms] ${ev.sanitizedQuery}${suffix}`,
-        );
-      });
-      add("http", (r) => {
-        const ev = r as { method: string; url: string; statusCode?: number; durationMs: number };
-        console.log(
-          `${prefix} HTTP    ${ev.method} ${ev.url} → ${ev.statusCode ?? "---"} (${ev.durationMs.toFixed(1)}ms)`,
-        );
-      });
-    }
-
+    const registered = installConsoleLogger(this, prefix, level);
+    this.debugListeners.push(...registered);
     return this;
   }
 

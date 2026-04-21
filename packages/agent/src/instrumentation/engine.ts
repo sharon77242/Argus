@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
-import { safeChannel } from "./safe-channel.ts";
+import { performance } from "node:perf_hooks";
+import { safeChannel, dcSubscribe, dcUnsubscribe } from "./safe-channel.ts";
 import { AstSanitizer } from "../sanitization/ast-sanitizer.ts";
 import { getCurrentContext } from "./correlation.ts";
 
@@ -62,13 +63,13 @@ export class InstrumentationEngine extends EventEmitter {
 
   public disable(): void {
     for (const [name, listener] of this.activeSubscriptions.entries()) {
-      safeChannel(name).unsubscribe(listener);
+      dcUnsubscribe(name, listener);
     }
     this.activeSubscriptions.clear();
   }
 
   private subscribeToChannel(name: string, listener: (msg: unknown) => void) {
-    safeChannel(name).subscribe(listener);
+    dcSubscribe(name, listener);
     this.activeSubscriptions.set(name, listener);
   }
 

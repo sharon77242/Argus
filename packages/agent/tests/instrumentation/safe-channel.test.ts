@@ -68,7 +68,7 @@ describe("HttpInstrumentation — monkey-patch fallback (simulated Node < 18)", 
   let instrumentation: HttpInstrumentation;
 
   afterEach(() => {
-    instrumentation?.disable();
+    instrumentation.disable();
   });
 
   it("monkey-patch path traces http.request correctly", async () => {
