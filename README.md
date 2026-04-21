@@ -106,6 +106,8 @@ const { ArgusAgent } = await import('argus');
 npm install argus-apm
 ```
 
+> The npm package is **`argus-apm`**.
+
 Then import from the compiled entry point:
 
 ```typescript
