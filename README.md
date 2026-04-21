@@ -6,7 +6,7 @@
 
 ![Argus demo](docs/demo.gif)
 
-A lightweight agent that embeds directly into your application — silently tracking runtime behaviour, isolating bottlenecks, and mathematically sanitizing all context before exporting OpenTelemetry (OTLP) telemetry to your observability stack.
+Named after Argus Panoptes, the hundred-eyed watchman of Greek mythology. A lightweight agent that embeds directly into your application — silently tracking runtime behaviour, isolating bottlenecks, and mathematically sanitizing all context before exporting OpenTelemetry (OTLP) telemetry to your observability stack.
 
 ---
 
