@@ -34,6 +34,56 @@ describe("OTLPExporter", () => {
     );
   });
 
+  // Bug: retry delay used retryDelayMs * attempt (linear) but JSDoc promised "doubles each attempt".
+  // With maxRetries=3 the 3rd retry diverges: linear gives 300ms, exponential gives 400ms.
+  it("should use exponential backoff — delay doubles each retry attempt", async () => {
+    const capturedDelays: number[] = [];
+    const origSetTimeout = globalThis.setTimeout;
+    // Capture delay values; fire immediately so the test doesn't actually wait
+    (globalThis as any).setTimeout = function (fn: () => void, ms?: number) {
+      if (typeof ms === "number" && ms >= 100) capturedDelays.push(ms);
+      return origSetTimeout(fn, 0);
+    };
+
+    const requestMock = mock.method(https, "request", (_opts: unknown, callback?: unknown) => {
+      const reqMock = new EventEmitter() as any;
+      reqMock.write = () => {};
+      reqMock.end = () => {};
+      reqMock.destroy = () => {};
+      const resMock = new EventEmitter() as any;
+      resMock.statusCode = 503; // always retryable
+      process.nextTick(() => {
+        if (typeof callback === "function") callback(resMock);
+        resMock.emit("end");
+      });
+      return reqMock;
+    });
+
+    const exporter = new OTLPExporter({
+      endpointUrl: "https://example.com/v1/traces",
+      key: "k",
+      cert: "c",
+      ca: "ca",
+      maxRetries: 3,
+      retryDelayMs: 100,
+    });
+
+    try {
+      await exporter.export([
+        { id: "1", metricName: "lag", value: 50, payload: { timestamp: Date.now() } },
+      ]);
+    } catch {
+      // all 4 attempts failed — expected
+    } finally {
+      (globalThis as any).setTimeout = origSetTimeout;
+      requestMock.mock.restore();
+    }
+
+    // attempt 1: 100*2^0=100  attempt 2: 100*2^1=200  attempt 3: 100*2^2=400
+    // (linear would give 100, 200, 300 — fails on the last value)
+    assert.deepStrictEqual(capturedDelays, [100, 200, 400], "delays must be exponential");
+  });
+
   it("should construct mTLS options using node:https request correctly", async () => {
     const mockRequest = mock.method(https, "request", (options: any, callback?: any) => {
       // Assert mTLS options are populated exactly

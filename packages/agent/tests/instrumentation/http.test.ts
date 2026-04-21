@@ -86,6 +86,45 @@ describe("HttpInstrumentation", () => {
     );
   });
 
+  // Bug: instrumentation listened for 'close' on the response instead of 'end'.
+  // On HTTP keep-alive connections the socket never closes promptly, so 'close' on
+  // IncomingMessage fires only when the connection eventually times out — meaning
+  // the "request" telemetry event could be delayed by seconds or never arrive.
+  // The fix is to listen for 'end', which fires as soon as the response body is consumed.
+  it("should emit the 'request' event before the socket closes (end semantics)", async () => {
+    const instrumentation = new HttpInstrumentation(() => undefined);
+    const events: TracedHttpRequest[] = [];
+    instrumentation.on("request", (r) => events.push(r));
+    instrumentation.enable();
+
+    // Server with keep-alive enabled (Node.js default) — it will NOT close the socket
+    // after the response, so IncomingMessage 'close' would only fire after the timeout.
+    const server = http.createServer((_req, res) => {
+      res.setHeader("Connection", "keep-alive");
+      res.writeHead(200);
+      res.end("hello");
+    });
+
+    await new Promise<void>((r) => server.listen(0, r));
+    const { port } = server.address() as { port: number };
+
+    const req = http.request(`http://localhost:${port}/`, (res) => {
+      res.on("data", () => {}); // consume so 'end' fires
+    });
+    req.end();
+
+    // Wait enough for 'end' to fire (few ms), but not for keep-alive timeout (5 000ms)
+    await new Promise((r) => setTimeout(r, 50));
+
+    instrumentation.disable();
+    // Force-close all connections so the port is released immediately
+    (server as any).closeAllConnections?.();
+    server.close();
+
+    assert.strictEqual(events.length, 1, "'request' event must fire before socket closes");
+    assert.strictEqual(events[0].statusCode, 200);
+  });
+
   it("should not include correlationId when request is outside runWithContext", async () => {
     const instrumentation = new HttpInstrumentation(() => "test.ts:1");
     const requests: TracedHttpRequest[] = [];

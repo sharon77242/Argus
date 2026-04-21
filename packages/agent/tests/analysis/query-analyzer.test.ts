@@ -79,4 +79,30 @@ describe("QueryAnalyzer", () => {
     const serious = suggestions.filter((s) => s.severity !== "info" && s.rule !== "n-plus-one");
     assert.strictEqual(serious.length, 0, "Well-formed query should have no serious issues");
   });
+
+  // Bug: normalization only collapsed '?' — PostgreSQL $N and :name params were not normalized,
+  // so structurally identical pg queries were treated as distinct and N+1 was never detected.
+  it("should detect N+1 for PostgreSQL $N placeholder style", () => {
+    const pgAnalyzer = new QueryAnalyzer();
+    // Each call uses a different parameter number but the same structural query
+    for (let i = 1; i <= 4; i++) {
+      const s = pgAnalyzer.analyze(`SELECT id, name FROM users WHERE id = $${i}`);
+      assert.ok(!s.find((x) => x.rule === "n-plus-one"), `Should not trigger at call ${i}`);
+    }
+    const suggestions = pgAnalyzer.analyze("SELECT id, name FROM users WHERE id = $5");
+    const rule = suggestions.find((s) => s.rule === "n-plus-one");
+    assert.ok(rule, "Should detect N+1 for PostgreSQL $N style params");
+  });
+
+  it("should detect N+1 for named :param placeholder style", () => {
+    const namedAnalyzer = new QueryAnalyzer();
+    for (let i = 1; i <= 4; i++) {
+      namedAnalyzer.analyze(`SELECT * FROM orders WHERE user_id = :userId${i} LIMIT 10`);
+    }
+    const suggestions = namedAnalyzer.analyze(
+      "SELECT * FROM orders WHERE user_id = :userId5 LIMIT 10",
+    );
+    const rule = suggestions.find((s) => s.rule === "n-plus-one");
+    assert.ok(rule, "Should detect N+1 for named :param style params");
+  });
 });

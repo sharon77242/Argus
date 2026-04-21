@@ -50,7 +50,7 @@ export class FsAnalyzer {
       if (entry) {
         if (now - entry.firstSeen <= this.READ_WINDOW_MS) {
           entry.count++;
-          if (entry.count === this.READ_THRESHOLD) {
+          if (entry.count >= this.READ_THRESHOLD) {
             suggestions.push({
               severity: "warning",
               rule: "missing-fs-cache",
@@ -67,8 +67,12 @@ export class FsAnalyzer {
         this.recentReads.set(filePath, { count: 1, firstSeen: now });
       }
 
-      // Cleanup
-      if (this.recentReads.size > 100) this.recentReads.clear();
+      // Evict only stale entries — never wipe the whole map
+      if (this.recentReads.size > 100) {
+        for (const [k, v] of this.recentReads) {
+          if (now - v.firstSeen > this.READ_WINDOW_MS) this.recentReads.delete(k);
+        }
+      }
     }
 
     return suggestions;
