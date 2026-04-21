@@ -118,18 +118,18 @@ describe("RuntimeMonitor (coverage)", () => {
   // ── env-var-based config ───────────────────────────────────────────────────
   it("should read configuration from environment variables", () => {
     const orig = {
-      RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS: process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS,
-      RUNTIME_MONITOR_MEMORY_GROWTH_BYTES: process.env.RUNTIME_MONITOR_MEMORY_GROWTH_BYTES,
-      RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS: process.env.RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS,
-      RUNTIME_MONITOR_CHECK_INTERVAL_MS: process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS,
-      RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS: process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS,
+      ARGUS_EVENT_LOOP_THRESHOLD_MS: process.env.ARGUS_EVENT_LOOP_THRESHOLD_MS,
+      ARGUS_MEMORY_GROWTH_BYTES: process.env.ARGUS_MEMORY_GROWTH_BYTES,
+      ARGUS_CPU_PROFILE_COOLDOWN_MS: process.env.ARGUS_CPU_PROFILE_COOLDOWN_MS,
+      ARGUS_MONITOR_CHECK_INTERVAL_MS: process.env.ARGUS_MONITOR_CHECK_INTERVAL_MS,
+      ARGUS_CPU_PROFILE_DURATION_MS: process.env.ARGUS_CPU_PROFILE_DURATION_MS,
     };
 
-    process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS = "25";
-    process.env.RUNTIME_MONITOR_MEMORY_GROWTH_BYTES = "512";
-    process.env.RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS = "30000";
-    process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS = "200";
-    process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS = "100";
+    process.env.ARGUS_EVENT_LOOP_THRESHOLD_MS = "25";
+    process.env.ARGUS_MEMORY_GROWTH_BYTES = "512";
+    process.env.ARGUS_CPU_PROFILE_COOLDOWN_MS = "30000";
+    process.env.ARGUS_MONITOR_CHECK_INTERVAL_MS = "200";
+    process.env.ARGUS_CPU_PROFILE_DURATION_MS = "100";
 
     try {
       monitor = new RuntimeMonitor();
@@ -151,8 +151,8 @@ describe("RuntimeMonitor (coverage)", () => {
 
   // ── safePositiveInt: NaN / negative / zero env-vars fall back to defaults ──
   it("[FIX] safePositiveInt: NaN env-var should fall back to default", () => {
-    const orig = process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS;
-    process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS = "not-a-number";
+    const orig = process.env.ARGUS_MONITOR_CHECK_INTERVAL_MS;
+    process.env.ARGUS_MONITOR_CHECK_INTERVAL_MS = "not-a-number";
     try {
       monitor = new RuntimeMonitor();
       const opts = (monitor as any).options;
@@ -162,14 +162,14 @@ describe("RuntimeMonitor (coverage)", () => {
         "NaN env-var should fall back to default (1000)",
       );
     } finally {
-      if (orig === undefined) delete process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS;
-      else process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS = orig;
+      if (orig === undefined) delete process.env.ARGUS_MONITOR_CHECK_INTERVAL_MS;
+      else process.env.ARGUS_MONITOR_CHECK_INTERVAL_MS = orig;
     }
   });
 
   it("[FIX] safePositiveInt: negative env-var should fall back to default", () => {
-    const orig = process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS;
-    process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS = "-100";
+    const orig = process.env.ARGUS_EVENT_LOOP_THRESHOLD_MS;
+    process.env.ARGUS_EVENT_LOOP_THRESHOLD_MS = "-100";
     try {
       monitor = new RuntimeMonitor();
       const opts = (monitor as any).options;
@@ -179,14 +179,14 @@ describe("RuntimeMonitor (coverage)", () => {
         "Negative env-var should fall back to default (50)",
       );
     } finally {
-      if (orig === undefined) delete process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS;
-      else process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS = orig;
+      if (orig === undefined) delete process.env.ARGUS_EVENT_LOOP_THRESHOLD_MS;
+      else process.env.ARGUS_EVENT_LOOP_THRESHOLD_MS = orig;
     }
   });
 
   it("[FIX] safePositiveInt: zero env-var should fall back to default", () => {
-    const orig = process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS;
-    process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS = "0";
+    const orig = process.env.ARGUS_CPU_PROFILE_DURATION_MS;
+    process.env.ARGUS_CPU_PROFILE_DURATION_MS = "0";
     try {
       monitor = new RuntimeMonitor();
       const opts = (monitor as any).options;
@@ -196,8 +196,8 @@ describe("RuntimeMonitor (coverage)", () => {
         "Zero env-var should fall back to default (500)",
       );
     } finally {
-      if (orig === undefined) delete process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS;
-      else process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS = orig;
+      if (orig === undefined) delete process.env.ARGUS_CPU_PROFILE_DURATION_MS;
+      else process.env.ARGUS_CPU_PROFILE_DURATION_MS = orig;
     }
   });
 

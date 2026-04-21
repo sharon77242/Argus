@@ -41,16 +41,27 @@
     "validate": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm run test:coverage"
   },
   "keywords": [
+    "argus",
     "node",
     "diagnostics",
     "performance",
     "profiling",
     "apm",
     "observability",
-    "privacy"
+    "privacy",
+    "monitoring",
+    "tracing"
   ],
-  "author": "",
+  "author": "Sharon Alhazov (https://github.com/sharon77242)",
   "license": "MIT",
+  "homepage": "https://github.com/sharon77242/Argus#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sharon77242/Argus.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sharon77242/Argus/issues"
+  },
   "devDependencies": {
     "@types/node": "^22.15.29",
     "@types/source-map": "^0.5.7",

@@ -165,7 +165,7 @@ const agent = await ArgusAgent.createProfile({
 ```
 
 > [!NOTE]
-> **Zero-overhead kill-switch** — set `DIAGNOSTIC_AGENT_ENABLED=false` (or `0`) in any environment and the agent skips all initialisation with no CPU cost. Useful for gradual rollouts, incident response, or staging overrides without a code deploy.
+> **Zero-overhead kill-switch** — set `ARGUS_ENABLED=false` (or `0`) in any environment and the agent skips all initialisation with no CPU cost. Useful for gradual rollouts, incident response, or staging overrides without a code deploy.
 
 ---
 
@@ -198,7 +198,7 @@ See [`quotes-demo-app/README.md`](quotes-demo-app/README.md) for the full setup 
 const agent = await ArgusAgent.createProfile({
   environment: 'prod',        // 'dev' | 'test' | 'prod'
   appType: ['web', 'db'],     // single string or array — modules are unioned
-  enabled: true,              // overridden by DIAGNOSTIC_AGENT_ENABLED env-var
+  enabled: true,              // overridden by ARGUS_ENABLED env-var
   workspaceDir: process.cwd(), // dev/test only — enables StaticScanner, AuditScanner, SourceMaps
 }).start();
 ```
@@ -537,14 +537,14 @@ All thresholds can be overridden without code changes, making the agent CI/CD an
 
 | Variable | Default | Controls |
 |---|---|---|
-| `DIAGNOSTIC_AGENT_ENABLED` | `true` | Set to `false` or `0` for a zero-CPU-overhead global kill-switch |
-| `DIAGNOSTIC_DEBUG` | `false` | Set to `true` to enable the built-in console logger for all agent events |
-| `RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS` | `50` | Minimum lag (ms) before an event-loop anomaly fires |
-| `RUNTIME_MONITOR_MEMORY_GROWTH_BYTES` | `10485760` (10 MB) | Minimum heap growth before a memory-leak anomaly fires |
-| `RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS` | `60000` | Minimum ms between back-to-back CPU profiles |
-| `RUNTIME_MONITOR_CHECK_INTERVAL_MS` | `1000` | How often thresholds are polled |
-| `RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS` | `500` | Duration of each CPU profile capture |
-| `RUNTIME_MONITOR_HEAP_USAGE_PCT_THRESHOLD` | `90` | Heap usage % of `heapTotal` before a memory anomaly fires |
+| `ARGUS_ENABLED` | `true` | Set to `false` or `0` for a zero-CPU-overhead global kill-switch |
+| `ARGUS_DEBUG` | `false` | Set to `true` to enable the built-in console logger for all agent events |
+| `ARGUS_EVENT_LOOP_THRESHOLD_MS` | `50` | Minimum lag (ms) before an event-loop anomaly fires |
+| `ARGUS_MEMORY_GROWTH_BYTES` | `10485760` (10 MB) | Minimum heap growth before a memory-leak anomaly fires |
+| `ARGUS_CPU_PROFILE_COOLDOWN_MS` | `60000` | Minimum ms between back-to-back CPU profiles |
+| `ARGUS_MONITOR_CHECK_INTERVAL_MS` | `1000` | How often thresholds are polled |
+| `ARGUS_CPU_PROFILE_DURATION_MS` | `500` | Duration of each CPU profile capture |
+| `ARGUS_HEAP_USAGE_PCT_THRESHOLD` | `90` | Heap usage % of `heapTotal` before a memory anomaly fires |
 | `ARGUS_SLOW_QUERY_THRESHOLD_MS` | `1000` | Global slow query threshold used when no per-driver default applies |
 | `ARGUS_SLOW_QUERY_THRESHOLD_<DRIVER>` | (per-driver) | Per-driver threshold override. Key is the driver name uppercased with non-alphanumeric runs replaced by `_` — e.g. `ARGUS_SLOW_QUERY_THRESHOLD_PG=500`, `ARGUS_SLOW_QUERY_THRESHOLD_REDIS=50`, `ARGUS_SLOW_QUERY_THRESHOLD_ELASTIC_ELASTICSEARCH=300` |
 
@@ -652,7 +652,7 @@ packages/agent/
     internal/
       profile-factory.ts             → buildAgentProfile() — preset resolution for createProfile()
       query-handler.ts               → createQueryHandler() — per-query sampling/analysis/slow-log closure
-      console-logger.ts              → installConsoleLogger() — DIAGNOSTIC_DEBUG event formatting
+      console-logger.ts              → installConsoleLogger() — ARGUS_DEBUG event formatting
 
     profiling/
       app-type-detector.ts           → package.json fingerprint scanner
@@ -769,14 +769,14 @@ runWithContext(agent.createContext('WORKER', '/process-job'), async () => {
 
 > [!IMPORTANT]
 > **OTLP export requires a paid Self-Hosted Pro or Enterprise license.**
-> In free mode the agent emits events locally via `EventEmitter` only — `.withExporter()` has no effect without a valid `DIAGNOSTIC_LICENSE_KEY`.
+> In free mode the agent emits events locally via `EventEmitter` only — `.withExporter()` has no effect without a valid `ARGUS_LICENSE_KEY`.
 > To get notified when Self-Hosted Pro licenses go on sale: open [this GitHub issue](https://github.com/sharon77242/Argus/issues) or email [sharon10vp614@gmail.com](mailto:sharon10vp614@gmail.com).
 
 The Self-Hosted Pro tier exports standard OTLP JSON directly to your own collector — no data ever leaves your infrastructure. Any OTLP-compatible collector works. Below is the quickest local setup using Jaeger's all-in-one image.
 
 ```bash
 # Set your license key (Self-Hosted Pro or Enterprise)
-export DIAGNOSTIC_LICENSE_KEY="your-license-key"
+export ARGUS_LICENSE_KEY="your-license-key"
 ```
 
 ### Jaeger (quickest local setup)

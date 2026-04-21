@@ -1,5 +1,5 @@
 /**
- * Coverage tests for ArgusAgent — DIAGNOSTIC_DEBUG, useConsoleLogger,
+ * Coverage tests for ArgusAgent — ARGUS_DEBUG, useConsoleLogger,
  * and remaining uncovered start/stop branches.
  */
 import { describe, it, afterEach } from "node:test";
@@ -14,11 +14,11 @@ describe("ArgusAgent (debug & logger coverage)", () => {
       agent.stop();
       agent = null;
     }
-    delete process.env.DIAGNOSTIC_DEBUG;
+    delete process.env.ARGUS_DEBUG;
   });
 
-  it("DIAGNOSTIC_DEBUG=true should activate console logger and not throw", async () => {
-    process.env.DIAGNOSTIC_DEBUG = "true";
+  it("ARGUS_DEBUG=true should activate console logger and not throw", async () => {
+    process.env.ARGUS_DEBUG = "true";
     agent = await ArgusAgent.create()
       .withInstrumentation()
       .withHttpTracing()
@@ -47,7 +47,7 @@ describe("ArgusAgent (debug & logger coverage)", () => {
   });
 
   it("crash event with no error.message should use the event itself", async () => {
-    process.env.DIAGNOSTIC_DEBUG = "true";
+    process.env.ARGUS_DEBUG = "true";
     agent = await ArgusAgent.create().withCrashGuard().start();
 
     // Emit crash with no error object

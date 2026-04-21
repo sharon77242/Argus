@@ -14,7 +14,7 @@
  *   - 520:     resolvePosition delegating to resolver
  *
  *   Also:
- *   - DIAGNOSTIC_AGENT_ENABLED='false' / '0' env-var kill-switch
+ *   - ARGUS_ENABLED='false' / '0' env-var kill-switch
  *   - withEntropyThreshold override on logTracingOptions
  */
 import { describe, it, afterEach } from "node:test";
@@ -68,42 +68,42 @@ describe("ArgusAgent (extended coverage)", () => {
     agent = null;
   });
 
-  // ── env-var kill-switch: DIAGNOSTIC_AGENT_ENABLED=false ──────────────────
-  it("should be disabled via DIAGNOSTIC_AGENT_ENABLED=false", async () => {
-    const orig = process.env.DIAGNOSTIC_AGENT_ENABLED;
-    process.env.DIAGNOSTIC_AGENT_ENABLED = "false";
+  // ── env-var kill-switch: ARGUS_ENABLED=false ──────────────────
+  it("should be disabled via ARGUS_ENABLED=false", async () => {
+    const orig = process.env.ARGUS_ENABLED;
+    process.env.ARGUS_ENABLED = "false";
     try {
       agent = ArgusAgent.createProfile({ enabled: true }); // config says enabled but env overrides
       await agent.start();
       assert.strictEqual(agent.isRunning, false);
     } finally {
-      if (orig === undefined) delete process.env.DIAGNOSTIC_AGENT_ENABLED;
-      else process.env.DIAGNOSTIC_AGENT_ENABLED = orig;
+      if (orig === undefined) delete process.env.ARGUS_ENABLED;
+      else process.env.ARGUS_ENABLED = orig;
     }
   });
 
-  it("should be disabled via DIAGNOSTIC_AGENT_ENABLED=0", async () => {
-    const orig = process.env.DIAGNOSTIC_AGENT_ENABLED;
-    process.env.DIAGNOSTIC_AGENT_ENABLED = "0";
+  it("should be disabled via ARGUS_ENABLED=0", async () => {
+    const orig = process.env.ARGUS_ENABLED;
+    process.env.ARGUS_ENABLED = "0";
     try {
       agent = ArgusAgent.createProfile({});
       await agent.start();
       assert.strictEqual(agent.isRunning, false);
     } finally {
-      if (orig === undefined) delete process.env.DIAGNOSTIC_AGENT_ENABLED;
-      else process.env.DIAGNOSTIC_AGENT_ENABLED = orig;
+      if (orig === undefined) delete process.env.ARGUS_ENABLED;
+      else process.env.ARGUS_ENABLED = orig;
     }
   });
 
-  it("should be enabled when DIAGNOSTIC_AGENT_ENABLED=true", async () => {
-    const orig = process.env.DIAGNOSTIC_AGENT_ENABLED;
-    process.env.DIAGNOSTIC_AGENT_ENABLED = "true";
+  it("should be enabled when ARGUS_ENABLED=true", async () => {
+    const orig = process.env.ARGUS_ENABLED;
+    process.env.ARGUS_ENABLED = "true";
     try {
       agent = await ArgusAgent.createProfile({ environment: "prod", appType: "web" }).start();
       assert.strictEqual(agent.isRunning, true);
     } finally {
-      if (orig === undefined) delete process.env.DIAGNOSTIC_AGENT_ENABLED;
-      else process.env.DIAGNOSTIC_AGENT_ENABLED = orig;
+      if (orig === undefined) delete process.env.ARGUS_ENABLED;
+      else process.env.ARGUS_ENABLED = orig;
     }
   });
 
@@ -326,7 +326,7 @@ describe("ArgusAgent (extended coverage)", () => {
   // ── Exporter wired to aggregator flush ────────────────────────────────────
   it("should emit error when exporter fails during aggregator flush", async () => {
     // shouldExport() requires a valid license — use dev-k1 with 'test-metric' allowed
-    process.env.DIAGNOSTIC_LICENSE_KEY = makeDevLicense(["test-metric"]);
+    process.env.ARGUS_LICENSE_KEY = makeDevLicense(["test-metric"]);
     try {
       agent = await ArgusAgent.create()
         .withExporter({
@@ -355,7 +355,7 @@ describe("ArgusAgent (extended coverage)", () => {
       const [err] = await Promise.race([errorPromise, timeout]);
       assert.ok(err instanceof Error, "Should emit an Error");
     } finally {
-      delete process.env.DIAGNOSTIC_LICENSE_KEY;
+      delete process.env.ARGUS_LICENSE_KEY;
     }
   });
 

@@ -46,9 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Core agent
 - `ArgusAgent` fluent builder with two entry points: `create()` (manual) and
   `createProfile()` (preset-based).
-- Zero-overhead global kill-switch via `DIAGNOSTIC_AGENT_ENABLED=false` — `.start()` becomes
+- Zero-overhead global kill-switch via `ARGUS_ENABLED=false` — `.start()` becomes
   a no-op with no timer, subscription, or memory overhead.
-- `DIAGNOSTIC_DEBUG=true` built-in console logger for all agent events.
+- `ARGUS_DEBUG=true` built-in console logger for all agent events.
 
 #### Preset system
 - Three environment presets: `prod`, `dev`, `test`.

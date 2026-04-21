@@ -189,7 +189,7 @@ export class ArgusAgent extends EventEmitter {
 
     // Globally kill-switch the agent; .start() and .stop() will become 0-overhead.
     // Environment variables take precedence over the config object.
-    const envEnabled = process.env.DIAGNOSTIC_AGENT_ENABLED;
+    const envEnabled = process.env.ARGUS_ENABLED;
     const isGloballyDisabled =
       envEnabled !== undefined
         ? envEnabled === "false" || envEnabled === "0"
@@ -471,7 +471,7 @@ export class ArgusAgent extends EventEmitter {
   public async start(): Promise<this> {
     if (this.globallyDisabled || this.running) return this;
 
-    if (process.env.DIAGNOSTIC_DEBUG === "true") {
+    if (process.env.ARGUS_DEBUG === "true") {
       this.useConsoleLogger();
     }
 
@@ -492,7 +492,7 @@ export class ArgusAgent extends EventEmitter {
 
   /** Step 0 — Validate license; fall back to free mode on any failure (never crash). */
   private validateLicenseKey(): void {
-    const licenseKey = process.env.DIAGNOSTIC_LICENSE_KEY;
+    const licenseKey = process.env.ARGUS_LICENSE_KEY;
     if (!licenseKey) return;
 
     try {
@@ -834,7 +834,7 @@ export class ArgusAgent extends EventEmitter {
   // ── built-in console logger ───────────────────────────────────
 
   /**
-   * Internal only — called automatically when DIAGNOSTIC_DEBUG=true.
+   * Internal only — called automatically when ARGUS_DEBUG=true.
    *
    * @param prefix  Log prefix (default: `[DiagAgent]`)
    * @param level   `'warn'` — anomalies/crashes/errors only (default)

@@ -36,7 +36,7 @@ describe("ArgusAgent (builder pattern)", () => {
   afterEach(async () => {
     await agent?.stop();
     agent = null;
-    delete process.env.DIAGNOSTIC_LICENSE_KEY;
+    delete process.env.ARGUS_LICENSE_KEY;
   });
 
   it("should start and stop with minimal configuration", async () => {
@@ -112,12 +112,12 @@ describe("ArgusAgent (builder pattern)", () => {
     result.withGracefulShutdown({ timeoutMs: 3000 }); // accepts options
   });
 
-  it("valid DIAGNOSTIC_LICENSE_KEY emits info with tier and exp", async () => {
+  it("valid ARGUS_LICENSE_KEY emits info with tier and exp", async () => {
     const jwt = buildJwt({
       ...BASE_CLAIMS,
       exp: Math.floor(Date.now() / 1000) + 3600,
     });
-    process.env.DIAGNOSTIC_LICENSE_KEY = jwt;
+    process.env.ARGUS_LICENSE_KEY = jwt;
 
     const messages: string[] = [];
     agent = ArgusAgent.create();
@@ -130,12 +130,12 @@ describe("ArgusAgent (builder pattern)", () => {
     );
   });
 
-  it("expired DIAGNOSTIC_LICENSE_KEY emits info about expiry without crashing", async () => {
+  it("expired ARGUS_LICENSE_KEY emits info about expiry without crashing", async () => {
     const jwt = buildJwt({
       ...BASE_CLAIMS,
       exp: Math.floor(Date.now() / 1000) - 3600, // already expired
     });
-    process.env.DIAGNOSTIC_LICENSE_KEY = jwt;
+    process.env.ARGUS_LICENSE_KEY = jwt;
 
     const messages: string[] = [];
     agent = ArgusAgent.create();
@@ -150,8 +150,8 @@ describe("ArgusAgent (builder pattern)", () => {
     assert.strictEqual(agent.isRunning, true, "Agent should still be running in free mode");
   });
 
-  it("invalid DIAGNOSTIC_LICENSE_KEY emits error without crashing", async () => {
-    process.env.DIAGNOSTIC_LICENSE_KEY = "not.a.valid.jwt.atall";
+  it("invalid ARGUS_LICENSE_KEY emits error without crashing", async () => {
+    process.env.ARGUS_LICENSE_KEY = "not.a.valid.jwt.atall";
 
     const errors: unknown[] = [];
     agent = ArgusAgent.create();

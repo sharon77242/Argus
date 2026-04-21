@@ -2,7 +2,7 @@
  * Console debug logger for ArgusAgent.
  *
  * Extracted from ArgusAgent to keep the main class focused on lifecycle.
- * When DIAGNOSTIC_DEBUG=true the agent calls installConsoleLogger() once during
+ * When ARGUS_DEBUG=true the agent calls installConsoleLogger() once during
  * start() — all registered listeners are returned so the agent can remove them
  * on stop() without leaking event subscriptions.
  */

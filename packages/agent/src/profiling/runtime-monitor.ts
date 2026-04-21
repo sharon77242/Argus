@@ -63,22 +63,22 @@ export class RuntimeMonitor extends EventEmitter {
     this.options = {
       eventLoopThresholdMs:
         options.eventLoopThresholdMs ??
-        safePositiveInt(process.env.RUNTIME_MONITOR_EVENT_LOOP_THRESHOLD_MS, 50),
+        safePositiveInt(process.env.ARGUS_EVENT_LOOP_THRESHOLD_MS, 50),
       memoryGrowthThresholdBytes:
         options.memoryGrowthThresholdBytes ??
-        safePositiveInt(process.env.RUNTIME_MONITOR_MEMORY_GROWTH_BYTES, 10 * 1024 * 1024),
+        safePositiveInt(process.env.ARGUS_MEMORY_GROWTH_BYTES, 10 * 1024 * 1024),
       cpuProfileCooldownMs:
         options.cpuProfileCooldownMs ??
-        safePositiveInt(process.env.RUNTIME_MONITOR_CPU_PROFILE_COOLDOWN_MS, 60000),
+        safePositiveInt(process.env.ARGUS_CPU_PROFILE_COOLDOWN_MS, 60000),
       checkIntervalMs:
         options.checkIntervalMs ??
-        safePositiveInt(process.env.RUNTIME_MONITOR_CHECK_INTERVAL_MS, 1000),
+        safePositiveInt(process.env.ARGUS_MONITOR_CHECK_INTERVAL_MS, 1000),
       cpuProfileDurationMs:
         options.cpuProfileDurationMs ??
-        safePositiveInt(process.env.RUNTIME_MONITOR_CPU_PROFILE_DURATION_MS, 500),
+        safePositiveInt(process.env.ARGUS_CPU_PROFILE_DURATION_MS, 500),
       heapUsagePctThreshold:
         options.heapUsagePctThreshold ??
-        safePositiveInt(process.env.RUNTIME_MONITOR_HEAP_USAGE_PCT_THRESHOLD, 90),
+        safePositiveInt(process.env.ARGUS_HEAP_USAGE_PCT_THRESHOLD, 90),
     };
 
     this.elMonitor = monitorEventLoopDelay({ resolution: 10 });

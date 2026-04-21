@@ -81,17 +81,17 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
 
   // ── 2. Zero-Overhead Kill-Switch ──────────────────────────────────────────
 
-  describe("2. Kill-switch — env var DIAGNOSTIC_AGENT_ENABLED=false", () => {
+  describe("2. Kill-switch — env var ARGUS_ENABLED=false", () => {
     beforeEach(() => {
-      delete process.env.DIAGNOSTIC_AGENT_ENABLED;
+      delete process.env.ARGUS_ENABLED;
     });
 
     after(() => {
-      delete process.env.DIAGNOSTIC_AGENT_ENABLED;
+      delete process.env.ARGUS_ENABLED;
     });
 
     it('is globally disabled when env var is "false"', async () => {
-      process.env.DIAGNOSTIC_AGENT_ENABLED = "false";
+      process.env.ARGUS_ENABLED = "false";
 
       const agent = ArgusAgent.createProfile({
         environment: "prod",
@@ -108,7 +108,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     });
 
     it('is globally disabled when env var is "0"', async () => {
-      process.env.DIAGNOSTIC_AGENT_ENABLED = "0";
+      process.env.ARGUS_ENABLED = "0";
 
       const agent = ArgusAgent.createProfile({ environment: "prod", appType: "web" });
       await agent.start();
@@ -117,7 +117,7 @@ describe("Scenario: Containerized Web + DB + Worker", () => {
     });
 
     it('is active when env var is "1"', async () => {
-      process.env.DIAGNOSTIC_AGENT_ENABLED = "1";
+      process.env.ARGUS_ENABLED = "1";
 
       const agent = ArgusAgent.createProfile({ environment: "prod", appType: "web" });
       await agent.start();
