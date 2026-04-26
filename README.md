@@ -474,7 +474,7 @@ The agent is an `EventEmitter`. All events are emitted on the `ArgusAgent` insta
 
 | Event | Payload | When |
 |---|---|---|
-| `'anomaly'` | `ProfilerEvent` | Memory leak, event loop lag, CPU spike detected |
+| `'anomaly'` | `ProfilerEvent` | Memory leak, event loop lag, CPU spike, or cross-signal compound anomaly |
 | `'query'` | `{ sanitizedQuery, durationMs, driver?, traceId?, correlationId?, cacheHit?, suggestions? }` | DB query completed |
 | `'slow-query'` | `SlowQueryRecord` | Query exceeded the per-driver threshold |
 | `'transaction'` | `TransactionEvent` | BEGIN/COMMIT/ROLLBACK pattern completed |
@@ -485,18 +485,20 @@ The agent is an `EventEmitter`. All events are emitted on the `ArgusAgent` insta
 | `'http'` | `{ method, url, statusCode, durationMs, suggestions }` | HTTP request completed |
 | `'dns'` | `DnsEvent` | DNS lookup completed |
 | `'slow-dns'` | `DnsEvent` | DNS lookup exceeded `slowThresholdMs` |
-| `'fs'` | `{ operation, path, durationMs, suggestions }` | File system operation completed |
+| `'fs'` | `{ operation, path, durationMs, suggestions }` | File system operation completed (suggestions include `sync-in-hot-path` when called inside a request) |
 | `'log'` | `{ level, scrubbed, durationMs, suggestions? }` | `console.*` call intercepted |
 | `'crash'` | `CrashEvent` | `uncaughtException` or `unhandledRejection` received |
 | `'leak'` | `ResourceLeakEvent` | Active OS handle count exceeded threshold |
-| `'scan'` | `StaticScanResult[]` | Background `tsc`/ESLint scan complete (dev/test only) |
+| `'scan'` | `StaticScanResult[]` | Background `tsc`/ESLint/connection-pool scan complete (dev/test only) |
 | `'audit'` | `AuditResult` | `npm audit` CVE scan complete (dev/test only) |
 | `'info'` | `string` | Advisory messages (e.g., auto-detection found nothing) |
 | `'error'` | `Error` | Non-fatal internal error (e.g., heap snapshot write failed) |
 
 ```typescript
 agent.on('anomaly', (event) => {
-  console.log(event.type);             // 'memory-leak' | 'event-loop-lag' | 'cpu-spike'
+  // runtime:    'memory-leak' | 'event-loop-lag' | 'cpu-spike'
+  // cross-signal: 'correlated-slow-endpoint' | 'pool-starvation-by-slow-query' | 'n-plus-one-in-transaction'
+  console.log(event.type);
   console.log(event.heapSnapshotPath); // only set when a snapshot write succeeded
 });
 
@@ -569,7 +571,7 @@ All thresholds can be overridden without code changes, making the agent CI/CD an
 | `.withInstrumentation(opts?)` | ✅ Yes | Low | DB/IO tracing via `diagnostics_channel` (16 drivers) |
 | `.withHttpTracing()` | ✅ Yes | Low | HTTP request inspection & slow-request detection |
 | `.withLogTracing(opts?)` | ✅ Yes | Low | `console.*` override with entropy-scrubbed payloads |
-| `.withFsTracing()` | ❌ **No** | High | Patches `fs`. Detects `*Sync` blockers. **DEV ONLY.** |
+| `.withFsTracing()` | ❌ **No** | High | Patches `fs`. Detects `*Sync` blockers; escalates to `sync-in-hot-path` (critical) when called inside a live request. **DEV ONLY.** |
 | `.withQueryAnalysis()` | ✅ Yes | Medium (AST) | N+1 detection + query fix suggestions |
 | `.withSlowQueryMonitor(opts?)` | ✅ Yes | Very Low | Per-driver slow query detection + top-N log |
 | `.withTransactionMonitor(opts?)` | ✅ Yes | Very Low | BEGIN/COMMIT/ROLLBACK duration tracking |
@@ -578,7 +580,7 @@ All thresholds can be overridden without code changes, making the agent CI/CD an
 | `.withPoolMonitor(opts?)` | ✅ Yes | Low | Connection pool exhaustion & slow-acquire |
 | `.withDnsMonitor(opts?)` | ✅ Yes | Low | DNS lookup latency tracking |
 | `.withAdaptiveSampler(opts?)` | ✅ Yes | Very Low | Token-bucket rate limiter under high load |
-| `.withStaticScanner(dir)` | ❌ **No** | High | Background `tsc`/ESLint scan. **DEV ONLY.** |
+| `.withStaticScanner(dir)` | ❌ **No** | High | Background `tsc`/ESLint scan + TypeScript AST walk for connection-pool misuse (`missing-connection-pool`). **DEV ONLY.** |
 | `.withAuditScanner(dir)` | ❌ **No** | High | Spawns `npm audit`. **DEV/startup ONLY.** |
 | `.withExporter(config)` | ✅ Yes | Very Low | OTLP JSON export over mTLS |
 | `.withAggregatorWindow(ms)` | ✅ Yes | None | Override p99 sliding window (default: 60 s) |

@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Phase R Wave 1 — Cross-signal diagnostic rules**: Five new rules that correlate events
+  from multiple subsystems to produce high-signal compound anomalies that no single monitor
+  can produce alone.
+  - **`sync-in-hot-path`** (`critical`) — `FsAnalyzer` now accepts an `insideRequest` flag.
+    When a `*Sync` FS call fires inside an active request context (`AsyncLocalStorage`), a
+    second, more specific suggestion is emitted alongside `synchronous-fs`. Wired automatically
+    by `FsInstrumentation` via `getCurrentContext()`.
+  - **`missing-connection-pool`** (`warning`) — `StaticScanner.runConnectionPoolScan()` walks
+    the TypeScript AST at startup to detect `new Client()`, `new Connection()`,
+    `createConnection()`, etc. called inside function bodies instead of at module scope.
+    Results are surfaced as `tool: "argus-static"` `ScanResult` entries.
+  - **`correlated-slow-endpoint`** (`critical`) — `ArgusAgent` cross-references the active
+    N+1 traceId index against incoming HTTP events. When an outbound HTTP call exceeds 1 s
+    and the same W3C `traceId` has an active N+1 pattern, a compound `anomaly` is emitted.
+  - **`pool-starvation-by-slow-query`** (`critical`) — When a `pool-exhaustion` event fires
+    within 10 s of a slow query on the same driver, the slow query is surfaced as the likely
+    culprit holding connections.
+  - **`n-plus-one-in-transaction`** (`critical`) — When N+1 is detected inside an open
+    transaction (matched by `traceId` / `correlationId`), severity is escalated to critical
+    because repeated queries inside a transaction also delay COMMIT and hold the connection.
+
 ### Fixed
 - **`SlowQueryMonitor.check()` type contract** — parameter changed from `driver: string` to
   `driver: string | undefined`. When no driver is known (e.g. manual `traceQuery()` calls or
