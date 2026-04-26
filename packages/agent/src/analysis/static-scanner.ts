@@ -23,9 +23,19 @@ interface TsDiagnostic {
   code: number;
   messageText: string | TsDiagnosticMessageChain;
 }
+interface TsNode {
+  kind: number;
+  pos: number;
+  end: number;
+}
+interface TsSourceFile extends TsNode {
+  fileName: string;
+  getLineAndCharacterOfPosition(pos: number): { line: number; character: number };
+}
 interface TsProgram {
   getSyntacticDiagnostics(): readonly TsDiagnostic[];
   getSemanticDiagnostics(): readonly TsDiagnostic[];
+  getSourceFiles(): readonly TsSourceFile[];
 }
 interface TsApi {
   sys: TsSystem;
@@ -48,6 +58,16 @@ interface TsApi {
     messageText: string | TsDiagnosticMessageChain,
     newLine: string,
   ): string;
+  SyntaxKind: {
+    readonly NewExpression: number;
+    readonly CallExpression: number;
+    readonly FunctionDeclaration: number;
+    readonly FunctionExpression: number;
+    readonly ArrowFunction: number;
+    readonly MethodDeclaration: number;
+    readonly Constructor: number;
+  };
+  forEachChild<T>(node: TsNode, cbNode: (node: TsNode) => T | undefined): T | undefined;
 }
 
 /**
@@ -85,7 +105,7 @@ export class StaticScanner extends EventEmitter {
   }
 
   /**
-   * Run a full scan (TypeScript + ESLint if available).
+   * Run a full scan (TypeScript + ESLint + connection-pool static rules if available).
    */
   public async scan(): Promise<ScanResult[]> {
     const results: ScanResult[] = [];
@@ -96,6 +116,11 @@ export class StaticScanner extends EventEmitter {
     const eslintResult = await this.runEslint();
     if (eslintResult) {
       results.push(eslintResult);
+    }
+
+    const poolResult = await this.runConnectionPoolScan();
+    if (poolResult && poolResult.totalIssues > 0) {
+      results.push(poolResult);
     }
 
     this.emit("scan", results);
@@ -248,6 +273,113 @@ export class StaticScanner extends EventEmitter {
         },
       );
     });
+  }
+
+  /**
+   * R.2 — Scan TypeScript source files for connection constructors called inside
+   * function bodies (missing-connection-pool). Uses the TypeScript Compiler API
+   * to walk the AST; returns null if TypeScript is not available.
+   */
+  public async runConnectionPoolScan(): Promise<ScanResult | null> {
+    const start = performance.now();
+
+    try {
+      const tsId = "typescript";
+      const tsModule: unknown = await import(tsId);
+      const ts = ((tsModule as { default?: TsApi }).default ?? tsModule) as TsApi;
+
+      const configPath = ts.findConfigFile(
+        this.targetDir,
+        (p: string) => ts.sys.fileExists(p),
+        "tsconfig.json",
+      );
+      if (!configPath) return null;
+
+      const { config, error: readError } = ts.readConfigFile(
+        configPath,
+        (p: string, enc?: string) => ts.sys.readFile(p, enc),
+      );
+      if (readError) return null;
+
+      const parsed = ts.parseJsonConfigFileContent(config as object, ts.sys, dirname(configPath));
+      const program = ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true });
+
+      const suggestions = this.detectConnectionInFunction(ts, program);
+
+      return {
+        tool: "argus-static",
+        totalIssues: suggestions.length,
+        suggestions,
+        durationMs: performance.now() - start,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private detectConnectionInFunction(ts: TsApi, program: TsProgram): FixSuggestion[] {
+    const suggestions: FixSuggestion[] = [];
+
+    const CONNECTION_CTORS = new Set([
+      "Client",
+      "Connection",
+      "Sequelize",
+      "MongoClient",
+      "createConnection",
+      "createPool",
+    ]);
+
+    const FUNCTION_KINDS = new Set([
+      ts.SyntaxKind.FunctionDeclaration,
+      ts.SyntaxKind.FunctionExpression,
+      ts.SyntaxKind.ArrowFunction,
+      ts.SyntaxKind.MethodDeclaration,
+      ts.SyntaxKind.Constructor,
+    ]);
+
+    const walk = (node: TsNode, sourceFile: TsSourceFile, insideFunction: boolean): void => {
+      const enterFunction = FUNCTION_KINDS.has(node.kind);
+      const nowInside = insideFunction || enterFunction;
+      const kindNew = ts.SyntaxKind.NewExpression;
+      const kindCall = ts.SyntaxKind.CallExpression;
+
+      if (insideFunction && (node.kind === kindNew || node.kind === kindCall)) {
+        const expr = (node as { expression?: { text?: string } }).expression;
+        const name = expr?.text;
+
+        if (name && CONNECTION_CTORS.has(name)) {
+          const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.pos);
+          const prefix = node.kind === kindNew ? `new ${name}()` : `${name}()`;
+          suggestions.push({
+            severity: "warning",
+            rule: "missing-connection-pool",
+            message: `${prefix} called inside a function body — creates a new connection per call instead of reusing a pool.`,
+            suggestedFix:
+              "Move the client/pool instantiation to module scope and reuse it across requests.",
+            location: `${sourceFile.fileName}:${line + 1}:${character + 1}`,
+          });
+        }
+      }
+
+      ts.forEachChild(node, (child) => {
+        walk(child, sourceFile, nowInside);
+        return undefined;
+      });
+    };
+
+    for (const sourceFile of program.getSourceFiles()) {
+      if (
+        sourceFile.fileName.includes("node_modules") ||
+        sourceFile.fileName.endsWith(".d.ts") ||
+        sourceFile.fileName.endsWith(".test.ts") ||
+        sourceFile.fileName.endsWith(".spec.ts")
+      )
+        continue;
+
+      walk(sourceFile as TsNode, sourceFile, false);
+    }
+
+    return suggestions;
   }
 
   /**

@@ -5,7 +5,7 @@ export class FsAnalyzer {
   private readonly READ_WINDOW_MS = 1000;
   private readonly READ_THRESHOLD = 5;
 
-  public analyze(methodName: string, filePath: string): FixSuggestion[] {
+  public analyze(methodName: string, filePath: string, insideRequest?: boolean): FixSuggestion[] {
     const suggestions: FixSuggestion[] = [];
 
     // 1. Sync Method Detection - Event Loop Blockers
@@ -16,6 +16,15 @@ export class FsAnalyzer {
         message: `Usage of ${methodName} blocks the entire Node.js Event Loop. A slow disk read pauses all other requests.`,
         suggestedFix: `Replace ${methodName} with the equivalent promise-based fs.promises.${methodName.replace("Sync", "")}() and await it.`,
       });
+
+      if (insideRequest) {
+        suggestions.push({
+          severity: "critical",
+          rule: "sync-in-hot-path",
+          message: `${methodName} called inside a live request handler — blocks the event loop for every concurrent request.`,
+          suggestedFix: `Replace with fs.promises.${methodName.replace("Sync", "")}() and await it.`,
+        });
+      }
     }
 
     // 2. Path Traversal Risks

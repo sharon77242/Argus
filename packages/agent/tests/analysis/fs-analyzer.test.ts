@@ -44,6 +44,41 @@ describe("FsAnalyzer", () => {
     assert.strictEqual(suggestions.length, 0);
   });
 
+  // R.1 — sync-in-hot-path
+  it("sync-in-hot-path fires when readFileSync is called inside a request context", () => {
+    const suggestions = new FsAnalyzer().analyze("readFileSync", "/tmp/config.json", true);
+    const rule = suggestions.find((s) => s.rule === "sync-in-hot-path");
+    assert.ok(rule, "sync-in-hot-path should fire");
+    assert.strictEqual(rule.severity, "critical");
+  });
+
+  it("sync-in-hot-path does NOT fire when insideRequest is false", () => {
+    const suggestions = new FsAnalyzer().analyze("readFileSync", "/tmp/config.json", false);
+    assert.ok(!suggestions.find((s) => s.rule === "sync-in-hot-path"));
+  });
+
+  it("sync-in-hot-path does NOT fire when insideRequest is omitted", () => {
+    const suggestions = new FsAnalyzer().analyze("readFileSync", "/tmp/config.json");
+    assert.ok(!suggestions.find((s) => s.rule === "sync-in-hot-path"));
+  });
+
+  it("both synchronous-fs and sync-in-hot-path fire together when inside request", () => {
+    const suggestions = new FsAnalyzer().analyze("readFileSync", "/tmp/x.json", true);
+    assert.ok(
+      suggestions.find((s) => s.rule === "synchronous-fs"),
+      "synchronous-fs must still fire",
+    );
+    assert.ok(
+      suggestions.find((s) => s.rule === "sync-in-hot-path"),
+      "sync-in-hot-path must also fire",
+    );
+  });
+
+  it("sync-in-hot-path does NOT fire for async methods even when insideRequest is true", () => {
+    const suggestions = new FsAnalyzer().analyze("readFile", "/tmp/config.json", true);
+    assert.ok(!suggestions.find((s) => s.rule === "sync-in-hot-path"));
+  });
+
   // Bug: threshold check used === so warning fired on exactly the 5th read and never again
   it("should keep warning on reads beyond the threshold (>= not ===)", () => {
     const fresh = new FsAnalyzer();

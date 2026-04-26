@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { FsAnalyzer } from "../analysis/fs-analyzer.ts";
 import type { FixSuggestion } from "../analysis/types.ts";
+import { getCurrentContext } from "./correlation.ts";
 
 import fs from "node:fs";
 
@@ -99,7 +100,7 @@ export class FsInstrumentation extends EventEmitter {
 
   private record(method: string, path: string, start: number, sourceLine?: string) {
     const durationMs = performance.now() - start;
-    const suggestions = this.analyzer.analyze(method, path);
+    const suggestions = this.analyzer.analyze(method, path, !!getCurrentContext());
 
     const traced: TracedFsOperation = {
       method,

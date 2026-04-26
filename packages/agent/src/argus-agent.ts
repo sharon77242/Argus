@@ -152,6 +152,8 @@ export class ArgusAgent extends EventEmitter {
   private running = false;
   // Listeners added by useConsoleLogger — kept so they can be removed on stop().
   private debugListeners: DebugListener[] = [];
+  // Listeners added by wireCrossSignalRules — removed on stop().
+  private crossSignalListeners: DebugListener[] = [];
   /** Set by buildAgentProfile when environment === 'dev'. */
   isDevMode = false;
 
@@ -488,6 +490,7 @@ export class ArgusAgent extends EventEmitter {
     this.aggregator!.enable();
     this.wireTrackers();
     this.wireGuards();
+    this.wireCrossSignalRules();
     this.runStartupScans();
     this.registerGracefulShutdown();
 
@@ -744,6 +747,177 @@ export class ArgusAgent extends EventEmitter {
     }
   }
 
+  /**
+   * Cross-signal rules — correlate events from multiple subsystems to produce
+   * high-signal compound anomalies that no single monitor can produce alone.
+   *
+   * R.3 correlated-slow-endpoint: slow HTTP + active N+1 on same traceId
+   * R.4 pool-starvation-by-slow-query: pool exhaustion within 10s of a slow query
+   * R.5 n-plus-one-in-transaction: N+1 detected inside an open transaction
+   */
+  private wireCrossSignalRules(): void {
+    const SLOW_HTTP_THRESHOLD_MS = 1_000;
+    const POOL_STARVATION_WINDOW_MS = 10_000;
+    const N_PLUS_ONE_TTL_MS = 30_000;
+
+    // traceId → timestamp of last N+1 detection (R.3)
+    const nPlusOneByTraceId = new Map<string, number>();
+    // query key → { timestamp, sanitizedQuery, durationMs, driver } (R.4)
+    const recentSlowQueries = new Map<
+      string,
+      { timestamp: number; sanitizedQuery: string; durationMs: number; driver?: string }
+    >();
+    // traceId/correlationId of currently open transactions (R.5)
+    const openTransactions = new Set<string>();
+
+    type QueryLike = {
+      sanitizedQuery?: string;
+      traceId?: string;
+      correlationId?: string;
+      suggestions?: { rule: string }[];
+    };
+    type HttpLike = {
+      method?: string;
+      url?: string;
+      durationMs?: number;
+      traceId?: string;
+    };
+    type SlowQueryLike = {
+      sanitizedQuery?: string;
+      durationMs?: number;
+      driver?: string;
+    };
+    type PoolExhaustionLike = {
+      driver?: string;
+      waitingCount?: number;
+    };
+
+    const onQuery = (event: QueryLike): void => {
+      const sql = event.sanitizedQuery ?? "";
+      const traceKey = event.traceId ?? event.correlationId;
+
+      // R.5: track open transactions
+      if (traceKey) {
+        if (/^\s*BEGIN\b/i.test(sql)) {
+          openTransactions.add(traceKey);
+        } else if (/^\s*(COMMIT|ROLLBACK)\b/i.test(sql)) {
+          openTransactions.delete(traceKey);
+        }
+      }
+
+      const hasNPlusOne = event.suggestions?.some((s) => s.rule === "n-plus-one");
+
+      // R.3: record traceIds with active N+1
+      if (hasNPlusOne && event.traceId) {
+        nPlusOneByTraceId.set(event.traceId, Date.now());
+      }
+
+      // R.5: N+1 inside open transaction
+      if (hasNPlusOne && traceKey && openTransactions.has(traceKey)) {
+        this.emit("anomaly", {
+          type: "n-plus-one-in-transaction",
+          traceId: event.traceId,
+          correlationId: event.correlationId,
+          suggestions: [
+            {
+              severity: "critical",
+              rule: "n-plus-one-in-transaction",
+              message:
+                "N+1 query pattern detected inside an open transaction — each repeated query holds the database connection and delays COMMIT.",
+              suggestedFix:
+                "Batch the repeated queries before opening the transaction, or use a JOIN/IN clause to reduce round-trips.",
+            },
+          ],
+        });
+      }
+    };
+
+    const onHttp = (event: HttpLike): void => {
+      // R.3: correlated-slow-endpoint
+      if (!event.traceId || !event.durationMs || event.durationMs <= SLOW_HTTP_THRESHOLD_MS) return;
+      const recordedAt = nPlusOneByTraceId.get(event.traceId);
+      if (!recordedAt) return;
+      if (Date.now() - recordedAt > N_PLUS_ONE_TTL_MS) {
+        nPlusOneByTraceId.delete(event.traceId);
+        return;
+      }
+      this.emit("anomaly", {
+        type: "correlated-slow-endpoint",
+        url: event.url,
+        method: event.method,
+        durationMs: event.durationMs,
+        traceId: event.traceId,
+        suggestions: [
+          {
+            severity: "critical",
+            rule: "correlated-slow-endpoint",
+            message: `${event.method ?? "HTTP"} ${event.url ?? "(unknown)"} took ${event.durationMs}ms — N+1 query pattern active within the same request trace.`,
+            suggestedFix:
+              "Batch the repeated queries with IN (...) or a JOIN before this endpoint can scale.",
+          },
+        ],
+      });
+    };
+
+    const onSlowQuery = (event: SlowQueryLike): void => {
+      // R.4: track recent slow queries keyed by a truncated query fingerprint
+      if (!event.sanitizedQuery) return;
+      const key = `${event.driver ?? ""}:${event.sanitizedQuery.slice(0, 120)}`;
+      recentSlowQueries.set(key, {
+        timestamp: Date.now(),
+        sanitizedQuery: event.sanitizedQuery,
+        durationMs: event.durationMs ?? 0,
+        driver: event.driver,
+      });
+    };
+
+    const onPoolExhaustion = (event: PoolExhaustionLike): void => {
+      // R.4: pool-starvation-by-slow-query
+      const now = Date.now();
+      const culprits: { sanitizedQuery: string; durationMs: number }[] = [];
+
+      for (const [key, sq] of recentSlowQueries) {
+        if (now - sq.timestamp > POOL_STARVATION_WINDOW_MS) {
+          recentSlowQueries.delete(key);
+          continue;
+        }
+        if (!event.driver || !sq.driver || sq.driver === event.driver) {
+          culprits.push({ sanitizedQuery: sq.sanitizedQuery, durationMs: sq.durationMs });
+        }
+      }
+
+      if (culprits.length === 0) return;
+
+      this.emit("anomaly", {
+        type: "pool-starvation-by-slow-query",
+        driver: event.driver,
+        waitingCount: event.waitingCount,
+        culprits,
+        suggestions: [
+          {
+            severity: "critical",
+            rule: "pool-starvation-by-slow-query",
+            message: `Connection pool exhausted (${event.waitingCount ?? 0} waiting) — ${culprits.length} slow ${event.driver ?? ""} quer${culprits.length === 1 ? "y is" : "ies are"} holding connections.`,
+            suggestedFix:
+              "Optimize the slow queries or increase pool size. Use EXPLAIN to identify missing indexes.",
+          },
+        ],
+      });
+    };
+
+    this.on("query", onQuery);
+    this.on("http", onHttp);
+    this.on("slow-query", onSlowQuery);
+    this.on("pool-exhaustion", onPoolExhaustion);
+
+    this.crossSignalListeners = [
+      ["query", onQuery],
+      ["http", onHttp],
+      ["slow-query", onSlowQuery],
+      ["pool-exhaustion", onPoolExhaustion],
+    ] as DebugListener[];
+  }
+
   /** Steps 7 + 13 — Fire-and-forget static and audit scans. */
   private runStartupScans(): void {
     if (this.staticScanDir) {
@@ -832,6 +1006,12 @@ export class ArgusAgent extends EventEmitter {
       this.off(event, fn);
     }
     this.debugListeners = [];
+
+    // Remove cross-signal rule listeners.
+    for (const [event, fn] of this.crossSignalListeners) {
+      this.off(event, fn);
+    }
+    this.crossSignalListeners = [];
 
     this.running = false;
   }

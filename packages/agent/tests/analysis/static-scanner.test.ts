@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { StaticScanner } from "../../src/analysis/static-scanner.ts";
 import type { ScanResult } from "../../src/analysis/types.ts";
 
+const BAD_POOL_DIR = join(import.meta.dirname, "../fixtures/pool-scan-bad");
+const CLEAN_POOL_DIR = join(import.meta.dirname, "../fixtures/pool-scan-clean");
+
 // A minimal fixture project with exactly one clean .ts file and its own
 // tsconfig.json. Using process.cwd() (the full agent project) is fragile
 // because the agent's tsconfig includes tests/, so any TS issue introduced
@@ -52,5 +55,53 @@ describe("StaticScanner", () => {
 
     // The scanner should handle an empty project gracefully
     assert.ok(scanner instanceof StaticScanner);
+  });
+});
+
+// R.2 — missing-connection-pool
+describe("StaticScanner — runConnectionPoolScan", () => {
+  it("flags new Client() called inside a function body", async () => {
+    const scanner = new StaticScanner(BAD_POOL_DIR);
+    const result = await scanner.runConnectionPoolScan();
+    assert.ok(result, "should return a ScanResult");
+    const rule = result.suggestions.find((s) => s.rule === "missing-connection-pool");
+    assert.ok(
+      rule,
+      `missing-connection-pool not found. Got: ${JSON.stringify(result.suggestions)}`,
+    );
+    assert.strictEqual(rule.severity, "warning");
+  });
+
+  it("flags createConnection() called inside a function body", async () => {
+    const scanner = new StaticScanner(BAD_POOL_DIR);
+    const result = await scanner.runConnectionPoolScan();
+    assert.ok(result);
+    const rules = result.suggestions.filter((s) => s.rule === "missing-connection-pool");
+    assert.ok(rules.length >= 2, `expected ≥2 findings, got ${rules.length}`);
+  });
+
+  it("does NOT flag new Client() at module top level", async () => {
+    const scanner = new StaticScanner(CLEAN_POOL_DIR);
+    const result = await scanner.runConnectionPoolScan();
+    assert.ok(result);
+    const rule = result.suggestions.find((s) => s.rule === "missing-connection-pool");
+    assert.ok(
+      !rule,
+      `should not flag module-level client, but got: ${JSON.stringify(result.suggestions)}`,
+    );
+  });
+
+  it("scan() includes pool scan results when issues are found", async () => {
+    const scanner = new StaticScanner(BAD_POOL_DIR);
+    const results = await scanner.scan();
+    const poolResult = results.find((r) => r.tool === "argus-static");
+    assert.ok(poolResult, "scan() should include argus-static result when issues found");
+    assert.ok(poolResult.suggestions.some((s) => s.rule === "missing-connection-pool"));
+  });
+
+  it("returns null gracefully when TypeScript is not available", async () => {
+    const scanner = new StaticScanner("/nonexistent/path");
+    const result = await scanner.runConnectionPoolScan();
+    assert.ok(result === null || result.totalIssues === 0);
   });
 });
