@@ -842,4 +842,4 @@ If Argus saves you debugging time, consider [sponsoring the project](https://git
 
 ## License
 
-MIT
+Apache-2.0

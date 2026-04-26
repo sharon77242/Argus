@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Argus — Privacy-first distributed diagnostics platform",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=22.6.0",
     "pnpm": ">=9"

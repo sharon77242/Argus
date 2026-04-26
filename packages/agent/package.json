@@ -53,7 +53,7 @@
     "tracing"
   ],
   "author": "Sharon Alhazov (https://github.com/sharon77242)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "homepage": "https://github.com/sharon77242/Argus#readme",
   "repository": {
     "type": "git",
